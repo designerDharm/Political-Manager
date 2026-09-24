@@ -17,7 +17,21 @@ import {
   UserCheck,
 } from 'lucide-react';
 
-export default function AnalyticsPage({ params }: { params: { id: string } }) {
+import { prisma } from '@/lib/prisma';
+
+export const revalidate = 0;
+
+export default async function AnalyticsPage({ params }: { params: { id: string } }) {
+  const [voterCount, householdCount, visitedCount, issueCount] = await Promise.all([
+    prisma.voter.count({ where: { campaignId: params.id } }),
+    prisma.household.count({ where: { campaignId: params.id } }),
+    prisma.household.count({ where: { campaignId: params.id, status: 'Verified' } }),
+    prisma.issue.count({ where: { campaignId: params.id } }),
+  ]);
+
+  const pendingCount = Math.max(0, householdCount - visitedCount);
+  const coveragePercent = householdCount > 0 ? Math.round((visitedCount / householdCount) * 100) : 0;
+
   return (
     <div className="flex min-h-screen bg-slate-50">
       <Sidebar role="CAMPAIGN_ADMIN" campaignId={params.id} />
@@ -30,7 +44,7 @@ export default function AnalyticsPage({ params }: { params: { id: string } }) {
         />
 
         <main className="flex-1 p-8 overflow-y-auto">
-          {/* Header & Date/Ward Pickers directly matching fa401604-1cfb-44f4-bc6a-d7936fb35e57.png */}
+          {/* Header & Date/Ward Pickers */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
             <div>
               <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Campaign Analytics</h1>
@@ -41,63 +55,58 @@ export default function AnalyticsPage({ params }: { params: { id: string } }) {
 
             <div className="flex items-center gap-3">
               <select className="border border-slate-200 bg-white rounded-lg px-3 py-1.5 text-xs text-slate-700 shadow-sm">
-                <option>Jan 2024 - Dec 2024</option>
+                <option>Active Period</option>
                 <option>Last 30 Days</option>
               </select>
               <select className="border border-slate-200 bg-white rounded-lg px-3 py-1.5 text-xs text-slate-700 shadow-sm">
                 <option>All Wards</option>
-                <option>Ward 12</option>
-                <option>Ward 13</option>
               </select>
             </div>
           </div>
 
-          {/* 5 Metric Cards directly matching fa401604...png */}
+          {/* 5 Metric Cards directly sourced from DB */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
             <StatCard
               title="Total Voters"
-              value="2,840"
-              subtitle="of 3,200 target"
+              value={voterCount.toLocaleString()}
+              subtitle="Registered electors"
               icon={Users}
               iconColor="text-blue-600"
               iconBgColor="bg-blue-50"
-              badge={{ text: '↑ 12%', type: 'info' }}
             />
             <StatCard
               title="Households"
-              value="892"
-              subtitle="of 1,000 target"
+              value={householdCount.toLocaleString()}
+              subtitle="Mapped residences"
               icon={Home}
               iconColor="text-amber-600"
               iconBgColor="bg-amber-50"
-              badge={{ text: '↑ 8%', type: 'info' }}
             />
             <StatCard
               title="Visited"
-              value="2,310"
-              subtitle="81% coverage"
+              value={visitedCount.toLocaleString()}
+              subtitle={`${coveragePercent}% coverage`}
               icon={MapPin}
               iconColor="text-emerald-600"
               iconBgColor="bg-emerald-50"
-              badge={{ text: '↑ 15%', type: 'success' }}
+              badge={{ text: visitedCount > 0 ? `${coveragePercent}%` : '0%', type: 'success' }}
             />
             <StatCard
               title="Pending"
-              value="530"
-              subtitle="19% remaining"
+              value={pendingCount.toLocaleString()}
+              subtitle="Awaiting door visit"
               icon={Clock}
               iconColor="text-rose-600"
               iconBgColor="bg-rose-50"
-              badge={{ text: '↓ 18%', type: 'danger' }}
             />
             <StatCard
               title="Issues"
-              value="124"
-              subtitle="open issues"
+              value={issueCount.toLocaleString()}
+              subtitle="Reported grievances"
               icon={AlertCircle}
               iconColor="text-rose-600"
               iconBgColor="bg-rose-50"
-              badge={{ text: '↓ 22%', type: 'success' }}
+              badge={{ text: issueCount > 0 ? `${issueCount} Open` : '0 Open', type: issueCount > 0 ? 'danger' : 'success' }}
             />
           </div>
 

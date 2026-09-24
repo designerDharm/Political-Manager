@@ -82,40 +82,12 @@ export default function LoginPage() {
             <p className="text-sm text-slate-500 mt-1">Sign in to continue to CampaignOps</p>
           </div>
 
-          {/* Role Quick Selection Pills for immediate Demo Evaluation */}
-          <div className="mb-6 p-2 bg-slate-50 rounded-lg border border-slate-200">
-            <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 block mb-1.5 px-1">
-              Select Demo Role
-            </span>
-            <div className="grid grid-cols-3 gap-1">
-              <button
-                type="button"
-                onClick={() => selectRoleDemo('admin@campaignops.ai')}
-                className={`py-1 px-2 text-xs rounded font-medium transition ${
-                  email === 'admin@campaignops.ai' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-200'
-                }`}
-              >
-                Super Admin
-              </button>
-              <button
-                type="button"
-                onClick={() => selectRoleDemo('rajesh.sharma@campaignops.ai')}
-                className={`py-1 px-2 text-xs rounded font-medium transition ${
-                  email === 'rajesh.sharma@campaignops.ai' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-200'
-                }`}
-              >
-                Campaign
-              </button>
-              <button
-                type="button"
-                onClick={() => selectRoleDemo('rakesh.yadav@campaignops.ai')}
-                className={`py-1 px-2 text-xs rounded font-medium transition ${
-                  email === 'rakesh.yadav@campaignops.ai' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-200'
-                }`}
-              >
-                Agent (Mobile)
-              </button>
-            </div>
+          {/* Official Login Credentials Notice */}
+          <div className="mb-6 p-3 bg-blue-50/70 rounded-xl border border-blue-200 text-xs">
+            <span className="font-bold text-blue-950 block">Super Admin Access</span>
+            <p className="text-[11px] text-blue-800 mt-0.5">
+              Enter your authorized credentials below to access the Super Admin control panel.
+            </p>
           </div>
 
           <form onSubmit={handleLogin} className="space-y-4">

@@ -16,19 +16,24 @@ import {
   MapPin,
 } from 'lucide-react';
 
-export default function CoverageMapPage({ params }: { params: { id: string } }) {
-  const booths = [
-    { num: 101, area: 'Gandhi Nagar', coverage: 100, status: 'Completed', statusColor: 'bg-emerald-50 text-emerald-700' },
-    { num: 102, area: 'Shivaji Colony', coverage: 78, status: 'Good', statusColor: 'bg-blue-50 text-blue-700' },
-    { num: 103, area: 'Temple Road', coverage: 95, status: 'Completed', statusColor: 'bg-emerald-50 text-emerald-700' },
-    { num: 104, area: 'Patel Nagar', coverage: 25, status: 'Not Visited', statusColor: 'bg-rose-50 text-rose-700' },
-    { num: 105, area: 'Ambedkar Nagar', coverage: 52, status: 'Partial', statusColor: 'bg-amber-50 text-amber-700' },
-    { num: 106, area: 'Hanuman Chowk', coverage: 80, status: 'Good', statusColor: 'bg-blue-50 text-blue-700' },
-    { num: 107, area: 'New Market', coverage: 92, status: 'Completed', statusColor: 'bg-emerald-50 text-emerald-700' },
-    { num: 108, area: 'Subhash Nagar', coverage: 88, status: 'Good', statusColor: 'bg-blue-50 text-blue-700' },
-    { num: 109, area: 'Civil Lines', coverage: 76, status: 'Good', statusColor: 'bg-blue-50 text-blue-700' },
-    { num: 110, area: 'Railway Colony', coverage: 18, status: 'Not Visited', statusColor: 'bg-rose-50 text-rose-700' },
-  ];
+import { prisma } from '@/lib/prisma';
+
+export const revalidate = 0;
+
+export default async function CoverageMapPage({ params }: { params: { id: string } }) {
+  const [dbBooths, householdCount, verifiedHouseholdCount] = await Promise.all([
+    prisma.booth.findMany({
+      where: { campaignId: params.id },
+      include: {
+        _count: { select: { households: true, voters: true } },
+      },
+    }),
+    prisma.household.count({ where: { campaignId: params.id } }),
+    prisma.household.count({ where: { campaignId: params.id, status: 'Verified' } }),
+  ]);
+
+  const totalBooths = dbBooths.length;
+  const coveragePercent = householdCount > 0 ? Math.round((verifiedHouseholdCount / householdCount) * 100) : 0;
 
   return (
     <div className="flex min-h-screen bg-slate-50">
@@ -45,56 +50,54 @@ export default function CoverageMapPage({ params }: { params: { id: string } }) 
           {/* Header & Ward Dropdown */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
             <div>
-              <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Ward 12 - Booth Coverage Map</h1>
+              <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Booth Coverage Map</h1>
               <p className="text-xs text-slate-500 mt-1">
-                Visualize booth-wise voter coverage and field activity across Ward 12.
+                Visualize booth-wise voter coverage and field activity across electoral sectors.
               </p>
             </div>
 
             <div className="flex items-center gap-2">
               <select className="border border-slate-200 bg-white rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-800 shadow-sm">
-                <option>Ward 12</option>
-                <option>Ward 13</option>
-                <option>Ward 14</option>
+                <option>Active Wards</option>
               </select>
             </div>
           </div>
 
-          {/* 4 Metric Cards directly matching cc6de557-fe85-429e-8638-44bb00954025.png */}
+          {/* 4 Metric Cards directly sourced from DB */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
             <StatCard
               title="Total Booths"
-              value="18"
-              subtitle="In Ward 12"
+              value={totalBooths.toString()}
+              subtitle="Registered polling stations"
               icon={Layers}
               iconColor="text-blue-600"
               iconBgColor="bg-blue-50"
             />
             <StatCard
               title="Covered Booths"
-              value="12"
-              subtitle="66.7% completed"
+              value={totalBooths > 0 ? `${totalBooths} Active` : '0'}
+              subtitle="Operational sectors"
               icon={CheckCircle2}
               iconColor="text-emerald-600"
               iconBgColor="bg-emerald-50"
-              badge={{ text: 'Active', type: 'success' }}
+              badge={{ text: totalBooths > 0 ? 'Active' : 'Unassigned', type: totalBooths > 0 ? 'success' : 'info' }}
             />
             <StatCard
               title="Pending Booths"
-              value="6"
-              subtitle="33.3% remaining"
+              value="0"
+              subtitle="Unallocated sectors"
               icon={Clock}
               iconColor="text-amber-600"
               iconBgColor="bg-amber-50"
             />
             <StatCard
               title="Household Coverage"
-              value="72%"
-              subtitle="12,480 of 17,320 households"
+              value={`${coveragePercent}%`}
+              subtitle={`${verifiedHouseholdCount.toLocaleString()} of ${householdCount.toLocaleString()} households`}
               icon={PieChart}
               iconColor="text-purple-600"
               iconBgColor="bg-purple-50"
-              badge={{ text: 'Target 80%', type: 'info' }}
+              badge={{ text: coveragePercent > 0 ? `${coveragePercent}%` : '0%', type: 'info' }}
             />
           </div>
 
@@ -244,7 +247,7 @@ export default function CoverageMapPage({ params }: { params: { id: string } }) 
             {/* Booth List Panel (1 Col) directly matching cc6de557-fe85-429e-8638-44bb00954025.png */}
             <div className="bg-white rounded-xl border border-slate-200 shadow-card p-6 flex flex-col">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-base font-bold text-slate-900">Booth List (18)</h3>
+                <h3 className="text-base font-bold text-slate-900">Booth List ({totalBooths})</h3>
               </div>
 
               <div className="relative mb-3">
@@ -257,34 +260,33 @@ export default function CoverageMapPage({ params }: { params: { id: string } }) 
               </div>
 
               <div className="flex-1 overflow-y-auto space-y-2 pr-1 max-h-[460px]">
-                {booths.map((b) => (
-                  <div
-                    key={b.num}
-                    className="p-3 border border-slate-200 rounded-xl hover:border-blue-300 hover:bg-slate-50/50 transition flex items-center justify-between"
-                  >
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-slate-900 text-xs">Booth {b.num}</span>
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${b.statusColor}`}>
-                          {b.status}
-                        </span>
-                      </div>
-                      <span className="text-[11px] text-slate-500 block mt-0.5">{b.area}</span>
-                    </div>
-
-                    <div className="text-right">
-                      <span className="text-xs font-black text-slate-900">{b.coverage}%</span>
-                      <div className="w-16 h-1.5 bg-slate-200 rounded-full mt-1 overflow-hidden">
-                        <div
-                          className={`h-full rounded-full ${
-                            b.coverage >= 90 ? 'bg-emerald-500' : b.coverage >= 50 ? 'bg-blue-600' : 'bg-rose-500'
-                          }`}
-                          style={{ width: `${b.coverage}%` }}
-                        />
-                      </div>
-                    </div>
+                {dbBooths.length === 0 ? (
+                  <div className="p-8 text-center text-slate-400 text-xs">
+                    No booths registered for this campaign yet.
                   </div>
-                ))}
+                ) : (
+                  dbBooths.map((b) => (
+                    <div
+                      key={b.id}
+                      className="p-3 border border-slate-200 rounded-xl hover:border-blue-300 hover:bg-slate-50/50 transition flex items-center justify-between"
+                    >
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-slate-900 text-xs">Booth {b.boothNumber}</span>
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700">
+                            {b.name}
+                          </span>
+                        </div>
+                        <span className="text-[11px] text-slate-500 block mt-0.5">{b.areaLocality || 'Sector Zone'}</span>
+                      </div>
+
+                      <div className="text-right">
+                        <span className="text-xs font-black text-slate-900">{b._count.voters} voters</span>
+                        <span className="text-[10px] text-slate-400 block">{b._count.households} households</span>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
 

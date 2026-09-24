@@ -98,7 +98,7 @@ export default async function SuperAdminDashboard() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4 mb-8">
             <StatCard
               title="Total Clients"
-              value={orgCount || 12}
+              value={orgCount.toLocaleString()}
               subtitle="Registered organizations"
               icon={Users}
               iconColor="text-blue-600"
@@ -106,7 +106,7 @@ export default async function SuperAdminDashboard() {
             />
             <StatCard
               title="Active Campaigns"
-              value={campaignCount ? campaignCount * 28 : 28}
+              value={campaignCount.toLocaleString()}
               subtitle="Currently running"
               icon={Megaphone}
               iconColor="text-emerald-600"
@@ -114,7 +114,7 @@ export default async function SuperAdminDashboard() {
             />
             <StatCard
               title="Total Users"
-              value={(userCount * 368).toLocaleString() || '1,842'}
+              value={userCount.toLocaleString()}
               subtitle="Platform users"
               icon={UserCheck}
               iconColor="text-purple-600"
@@ -122,16 +122,16 @@ export default async function SuperAdminDashboard() {
             />
             <StatCard
               title="Storage Used"
-              value="68 GB"
-              subtitle="Of 500 GB allocated"
+              value="0.2 GB"
+              subtitle="Database storage allocated"
               icon={HardDrive}
               iconColor="text-amber-600"
               iconBgColor="bg-amber-50"
             />
             <StatCard
               title="AI Processing Jobs"
-              value="124"
-              subtitle="In last 30 days"
+              value={importCount.toLocaleString()}
+              subtitle="Electoral roll batches"
               icon={Cpu}
               iconColor="text-rose-600"
               iconBgColor="bg-rose-50"

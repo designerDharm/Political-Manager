@@ -25,12 +25,23 @@ export default async function CampaignAdminDashboard({
 }: {
   params: { id: string };
 }) {
-  const [voterCount, householdCount, issueCount, boothCount] = await Promise.all([
-    prisma.voter.count(),
-    prisma.household.count(),
-    prisma.issue.count(),
-    prisma.booth.count(),
+  const [voterCount, householdCount, visitedHouseholdCount, issueCount, campaign] = await Promise.all([
+    prisma.voter.count({ where: { campaignId: params.id } }),
+    prisma.household.count({ where: { campaignId: params.id } }),
+    prisma.household.count({ where: { campaignId: params.id, status: 'Verified' } }),
+    prisma.issue.count({ where: { campaignId: params.id } }),
+    prisma.campaign.findUnique({
+      where: { id: params.id },
+      include: {
+        election: true,
+        wards: true,
+      },
+    }),
   ]);
+
+  const targetHouseholds = campaign?.targetVoters ? Math.round(campaign.targetVoters / 3) : householdCount;
+  const progressPercent = targetHouseholds > 0 ? Math.round((visitedHouseholdCount / targetHouseholds) * 100) : 0;
+  const pendingVisits = Math.max(0, householdCount - visitedHouseholdCount);
 
   return (
     <div className="flex min-h-screen bg-slate-50">
@@ -48,11 +59,15 @@ export default async function CampaignAdminDashboard({
           <div className="bg-white rounded-xl border border-slate-200 p-6 mb-8 shadow-card flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <div className="flex items-center gap-2 text-xs font-bold text-blue-600 uppercase tracking-wider mb-1">
-                <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />
-                Active Campaign
+                <span className={`w-2 h-2 rounded-full ${campaign ? 'bg-blue-600 animate-pulse' : 'bg-slate-400'}`} />
+                {campaign?.status || 'No Active Campaign'}
               </div>
-              <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Sharma for Assembly 2026</h1>
-              <p className="text-xs text-slate-500 mt-1">Ward 12 • Gandhi Nagar • Assembly Constituency 45</p>
+              <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+                {campaign?.name || 'No Campaign Configured'}
+              </h1>
+              <p className="text-xs text-slate-500 mt-1">
+                {campaign ? `${campaign.electionName} • ${campaign.electionLevel}` : 'Create a campaign or import electoral roll data to begin.'}
+              </p>
             </div>
 
             <div className="flex items-center gap-3">
@@ -76,20 +91,25 @@ export default async function CampaignAdminDashboard({
             <div className="flex items-center justify-between mb-3">
               <div>
                 <h3 className="text-base font-bold text-slate-900">Campaign Household Progress</h3>
-                <p className="text-xs text-slate-500">67% Households Completed (804 of 1,200 households visited)</p>
+                <p className="text-xs text-slate-500">
+                  {progressPercent}% Households Completed ({visitedHouseholdCount.toLocaleString()} of {targetHouseholds.toLocaleString()} target)
+                </p>
               </div>
-              <span className="text-2xl font-black text-blue-600">67%</span>
+              <span className="text-2xl font-black text-blue-600">{progressPercent}%</span>
             </div>
             <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden">
-              <div className="bg-gradient-to-r from-blue-600 to-emerald-500 h-3 rounded-full transition-all duration-500" style={{ width: '67%' }} />
+              <div
+                className="bg-gradient-to-r from-blue-600 to-emerald-500 h-3 rounded-full transition-all duration-500"
+                style={{ width: `${progressPercent}%` }}
+              />
             </div>
           </div>
 
-          {/* 4 Stat Cards */}
+          {/* 4 Stat Cards directly sourced from DB */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
             <StatCard
               title="Total Registered Voters"
-              value={voterCount || 2840}
+              value={voterCount.toLocaleString()}
               subtitle="Imported & normalized"
               icon={Users}
               iconColor="text-blue-600"
@@ -97,29 +117,29 @@ export default async function CampaignAdminDashboard({
             />
             <StatCard
               title="Households Visited"
-              value="804"
-              subtitle="67% of 1,200 total target"
+              value={visitedHouseholdCount.toLocaleString()}
+              subtitle={`${progressPercent}% of target households`}
               icon={CheckCircle}
               iconColor="text-emerald-600"
               iconBgColor="bg-emerald-50"
-              badge={{ text: 'On Track', type: 'success' }}
+              badge={{ text: visitedHouseholdCount > 0 ? 'On Track' : 'Not Started', type: visitedHouseholdCount > 0 ? 'success' : 'info' }}
             />
             <StatCard
               title="Pending Visits"
-              value="329"
-              subtitle="Assigned to active field agents"
+              value={pendingVisits.toLocaleString()}
+              subtitle="Remaining in field queue"
               icon={Clock}
               iconColor="text-amber-600"
               iconBgColor="bg-amber-50"
             />
             <StatCard
               title="Field Issues Reported"
-              value={issueCount || 24}
-              subtitle="Across 4 operational categories"
+              value={issueCount.toLocaleString()}
+              subtitle="Grievances & data corrections"
               icon={AlertTriangle}
               iconColor="text-rose-600"
               iconBgColor="bg-rose-50"
-              badge={{ text: 'Action Req', type: 'danger' }}
+              badge={{ text: issueCount > 0 ? 'Action Req' : 'Zero Issues', type: issueCount > 0 ? 'danger' : 'success' }}
             />
           </div>
 

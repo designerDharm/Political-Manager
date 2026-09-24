@@ -31,6 +31,11 @@ export default async function IssueManagementPage({ params }: { params: { id: st
     orderBy: { createdAt: 'desc' },
   });
 
+  const totalIssues = issues.length;
+  const openIssues = issues.filter((i) => i.status === 'OPEN' || i.status === 'IN_PROGRESS').length;
+  const resolvedIssues = issues.filter((i) => i.status === 'RESOLVED').length;
+  const highPriority = issues.filter((i) => i.priority === 'HIGH' || i.priority === 'CRITICAL').length;
+
   return (
     <div className="flex min-h-screen bg-slate-50">
       <Sidebar role="CAMPAIGN_ADMIN" campaignId={params.id} />
@@ -58,43 +63,42 @@ export default async function IssueManagementPage({ params }: { params: { id: st
             </button>
           </div>
 
-          {/* 4 Metric Cards directly matching c19c3e78-7ee8-4b10-a5dd-96dcfdfd5d6b.png */}
+          {/* 4 Metric Cards directly sourced from database */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
             <StatCard
               title="Total Issues"
-              value="24"
+              value={totalIssues.toLocaleString()}
               subtitle="All reported issues"
               icon={AlertCircle}
               iconColor="text-blue-600"
               iconBgColor="bg-blue-50"
-              badge={{ text: '↑ 12%', type: 'info' }}
             />
             <StatCard
               title="Open Issues"
-              value="14"
+              value={openIssues.toLocaleString()}
               subtitle="Require attention"
               icon={Clock}
               iconColor="text-amber-600"
               iconBgColor="bg-amber-50"
-              badge={{ text: '↑ 8%', type: 'warning' }}
+              badge={{ text: openIssues > 0 ? 'Pending' : 'All Clear', type: openIssues > 0 ? 'warning' : 'success' }}
             />
             <StatCard
               title="Resolved Issues"
-              value="8"
+              value={resolvedIssues.toLocaleString()}
               subtitle="Successfully closed"
               icon={CheckCircle2}
               iconColor="text-emerald-600"
               iconBgColor="bg-emerald-50"
-              badge={{ text: '↑ 33%', type: 'success' }}
+              badge={{ text: 'Resolved', type: 'success' }}
             />
             <StatCard
               title="High Priority"
-              value="6"
+              value={highPriority.toLocaleString()}
               subtitle="Critical issues"
               icon={AlertTriangle}
               iconColor="text-rose-600"
               iconBgColor="bg-rose-50"
-              badge={{ text: '↑ 20%', type: 'danger' }}
+              badge={{ text: highPriority > 0 ? 'Critical' : 'None', type: highPriority > 0 ? 'danger' : 'success' }}
             />
           </div>
 

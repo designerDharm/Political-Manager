@@ -69,7 +69,7 @@ export default async function CorrectedElectionDayPage({ params }: { params: { i
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
             <StatCard
               title="Total Registered Electors"
-              value="1,24,580"
+              value={voterCount.toLocaleString()}
               subtitle="Imported electoral database"
               icon={Users}
               iconColor="text-blue-600"
@@ -77,16 +77,16 @@ export default async function CorrectedElectionDayPage({ params }: { params: { i
             />
             <StatCard
               title="Official Aggregate Turnout"
-              value={`${latestTurnout}%`}
+              value={turnoutSnapshots.length > 0 ? `${latestTurnout}%` : '0%'}
               subtitle="Authorized polling agent reports"
               icon={Building}
               iconColor="text-emerald-600"
               iconBgColor="bg-emerald-50"
-              badge={{ text: 'Official Estimate', type: 'success' }}
+              badge={{ text: turnoutSnapshots.length > 0 ? 'Official Estimate' : 'Awaiting Polls', type: turnoutSnapshots.length > 0 ? 'success' : 'info' }}
             />
             <StatCard
               title="Help Desk Slips Issued (VIS)"
-              value="78,432"
+              value={visEventCount.toLocaleString()}
               subtitle="Assistance delivered (Non-ballot)"
               icon={FileText}
               iconColor="text-amber-600"
@@ -95,8 +95,8 @@ export default async function CorrectedElectionDayPage({ params }: { params: { i
             />
             <StatCard
               title="Booths Active & Staffed"
-              value="318 / 320"
-              subtitle="99.4% booth coverage"
+              value={`${boothCount} Booths`}
+              subtitle={boothCount > 0 ? '100% booth coverage' : 'No booths configured'}
               icon={UserCheck}
               iconColor="text-purple-600"
               iconBgColor="bg-purple-50"
