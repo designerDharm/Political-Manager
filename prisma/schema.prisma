@@ -1,0 +1,547 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model Organization {
+  id              String             @id @default(uuid())
+  name            String
+  slug            String             @unique
+  status          String             @default("ACTIVE")
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  users           User[]
+  elections       Election[]
+  campaigns       Campaign[]
+  parties         Party[]
+  candidates      Candidate[]
+  privacyPurposes PrivacyPurpose[]
+  retentionPolicies RetentionPolicy[]
+  privacyRequests PrivacyRequest[]
+  securityIncidents SecurityIncident[]
+  approvalRequests ApprovalRequest[]
+  auditEvents     AuditEvent[]
+}
+
+model User {
+  id                 String               @id @default(uuid())
+  organizationId     String
+  email              String               @unique
+  phone              String?
+  displayName        String
+  role               String               @default("POLITICAL_AGENT") // SUPER_ADMIN, CAMPAIGN_ADMIN, BOOTH_MANAGER, POLITICAL_AGENT
+  status             String               @default("ACTIVE")
+  avatarUrl          String?
+  mfaEnabled         Boolean              @default(false)
+  lastLoginAt        DateTime?
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  organization       Organization         @relation(fields: [organizationId], references: [id])
+  memberships        CampaignMembership[]
+  assignments        Assignment[]         @relation("AssignedTo")
+  createdAssignments Assignment[]         @relation("CreatedBy")
+  interactions       Interaction[]
+  reportedIssues     Issue[]              @relation("ReportedBy")
+  assignedIssues     Issue[]              @relation("AssignedIssue")
+  visIssued          VisEvent[]
+  devices            UserDevice[]
+}
+
+model UserDevice {
+  id             String    @id @default(uuid())
+  userId         String
+  deviceName     String
+  deviceType     String    // MOBILE, TABLET, DESKTOP
+  os             String?
+  browser        String?
+  ipAddress      String?
+  isTrusted      Boolean   @default(false)
+  lastActiveAt   DateTime  @default(now())
+  createdAt      DateTime  @default(now())
+  user           User      @relation(fields: [userId], references: [id])
+}
+
+// -------------------------------------------------------------
+// NORMALIZED ELECTIONS, PARTIES & CANDIDATES
+// -------------------------------------------------------------
+
+model Election {
+  id             String               @id @default(uuid())
+  organizationId String
+  name           String
+  level          String               @default("STATE_ASSEMBLY")
+  year           Int                  @default(2026)
+  electionDate   DateTime?
+  status         String               @default("UPCOMING")
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  organization   Organization         @relation(fields: [organizationId], references: [id])
+  campaigns      Campaign[]
+  constituencies Constituency[]
+  candidates     CandidateElection[]
+}
+
+model Party {
+  id             String       @id @default(uuid())
+  organizationId String
+  name           String
+  abbreviation   String?
+  symbolUrl      String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  candidates     Candidate[]
+}
+
+model Candidate {
+  id             String              @id @default(uuid())
+  organizationId String
+  partyId        String?
+  fullName       String
+  phone          String?
+  email          String?
+  photoUrl       String?
+  bio            String?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  organization   Organization        @relation(fields: [organizationId], references: [id])
+  party          Party?              @relation(fields: [partyId], references: [id])
+  elections      CandidateElection[]
+  campaigns      CampaignCandidate[]
+}
+
+model CandidateElection {
+  id             String        @id @default(uuid())
+  candidateId    String
+  electionId     String
+  constituencyId String?
+  candidate      Candidate     @relation(fields: [candidateId], references: [id])
+  election       Election      @relation(fields: [electionId], references: [id])
+  constituency   Constituency? @relation(fields: [constituencyId], references: [id])
+}
+
+model CampaignCandidate {
+  id          String    @id @default(uuid())
+  campaignId  String
+  candidateId String
+  isPrimary   Boolean   @default(true)
+  campaign    Campaign  @relation(fields: [campaignId], references: [id])
+  candidate   Candidate @relation(fields: [candidateId], references: [id])
+}
+
+model Constituency {
+  id                 String              @id @default(uuid())
+  electionId         String
+  code               String
+  name               String
+  state              String
+  district           String
+  boundaryVersion    Int                 @default(1)
+  effectiveFrom      DateTime            @default(now())
+  effectiveTo        DateTime?
+  geometryGeoJson    String?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  election           Election            @relation(fields: [electionId], references: [id])
+  wards              Ward[]
+  candidateElections CandidateElection[]
+}
+
+model Campaign {
+  id               String               @id @default(uuid())
+  organizationId   String
+  electionId       String?
+  name             String
+  electionName     String
+  electionLevel    String               @default("STATE_ASSEMBLY")
+  electionYear     Int                  @default(2026)
+  electionDate     DateTime?
+  candidateName    String?              // Kept for backward compatibility
+  partyName        String?              // Kept for backward compatibility
+  candidatePhoto   String?
+  description      String?
+  status           String               @default("ACTIVE")
+  targetVoters     Int                  @default(0)
+  targetCoverage   Int                  @default(80)
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+  organization     Organization         @relation(fields: [organizationId], references: [id])
+  election         Election?            @relation(fields: [electionId], references: [id])
+  candidates       CampaignCandidate[]
+  memberships      CampaignMembership[]
+  wards            Ward[]
+  booths           Booth[]
+  voters           Voter[]
+  households       Household[]
+  imports          ElectoralRollImport[]
+  assignments      Assignment[]
+  issues           Issue[]
+  turnoutSnapshots TurnoutSnapshot[]
+  visEvents        VisEvent[]
+}
+
+model CampaignMembership {
+  id         String   @id @default(uuid())
+  campaignId String
+  userId     String
+  role       String   @default("POLITICAL_AGENT")
+  scopeType  String   @default("ALL") // ALL, WARD, BOOTH
+  scopeIds   String   @default("[]")  // JSON array of Ward/Booth IDs
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  campaign   Campaign @relation(fields: [campaignId], references: [id])
+  user       User     @relation(fields: [userId], references: [id])
+}
+
+model Ward {
+  id              String        @id @default(uuid())
+  campaignId      String
+  constituencyId  String?
+  wardNumber      Int
+  name            String
+  boundaryVersion Int           @default(1)
+  createdAt       DateTime      @default(now())
+  campaign        Campaign      @relation(fields: [campaignId], references: [id])
+  constituency    Constituency? @relation(fields: [constituencyId], references: [id])
+  booths          Booth[]
+  voters          Voter[]
+}
+
+model Booth {
+  id              String      @id @default(uuid())
+  campaignId      String
+  wardId          String
+  boothNumber     Int
+  name            String
+  areaLocality    String
+  pollingStation  String
+  totalElectors   Int         @default(0)
+  status          String      @default("Active") // Active, Slow, Issue
+  coverageStatus  String      @default("Partial") // Not Visited, Partial, Good, Completed
+  assignedAgentId String?
+  boundaryVersion Int         @default(1)
+  latitude        Float?
+  longitude       Float?
+  createdAt       DateTime    @default(now())
+  campaign        Campaign    @relation(fields: [campaignId], references: [id])
+  ward            Ward        @relation(fields: [wardId], references: [id])
+  voters          Voter[]
+  households      Household[]
+  issues          Issue[]
+  visEvents       VisEvent[]
+  turnout         TurnoutSnapshot[]
+}
+
+// -------------------------------------------------------------
+// 9-STAGE IMPORT PIPELINE & AI EXTRACTION
+// -------------------------------------------------------------
+
+model ElectoralRollImport {
+  id                  String       @id @default(uuid())
+  campaignId          String
+  originalFilename    String
+  fileSize            String
+  status              String       @default("Pending") // Upload, FileValidation, OcrTextExtraction, StructuredExtraction, LowConfidenceReview, DuplicateReview, HouseholdSuggestion, Reconciliation, Completed, Failed
+  totalExtracted      Int          @default(0)
+  totalHouseholds     Int          @default(0)
+  confidenceAvg       Float        @default(0.95)
+  lowConfidenceCount  Int          @default(0)
+  duplicateCount      Int          @default(0)
+  uploadedAt          DateTime     @default(now())
+  completedAt         DateTime?
+  campaign            Campaign     @relation(fields: [campaignId], references: [id])
+  pages               ImportPage[]
+}
+
+model ImportPage {
+  id             String              @id @default(uuid())
+  importId       String
+  pageNumber     Int
+  ocrStatus      String              @default("Completed")
+  confidence     Float               @default(0.95)
+  rawText        String?
+  importJob      ElectoralRollImport @relation(fields: [importId], references: [id])
+}
+
+// -------------------------------------------------------------
+// HOUSEHOLDS & EXPLAINABILITY
+// -------------------------------------------------------------
+
+model Household {
+  id                 String            @id @default(uuid())
+  campaignId         String
+  boothId            String
+  code               String            // H-001, H-002, etc.
+  address            String
+  houseNumber        String
+  primaryContactName String?
+  primaryContactId   String?
+  aiConfidence       Int               @default(90) // percentage
+  status             String            @default("Verified") // Verified, Pending
+  evidenceSignals    String            @default("[]") // JSON: ["EXACT_HOUSE_NO", "SAME_NORMALIZED_ADDRESS", "GUARDIAN_MATCH"]
+  version            Int               @default(1)    // Optimistic locking
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  campaign           Campaign          @relation(fields: [campaignId], references: [id])
+  booth              Booth             @relation(fields: [boothId], references: [id])
+  members            Voter[]
+  interactions       Interaction[]
+  issues             Issue[]
+}
+
+// -------------------------------------------------------------
+// VOTERS & FIELD-LEVEL DATA PROVENANCE
+// -------------------------------------------------------------
+
+model Voter {
+  id                 String                 @id @default(uuid())
+  campaignId         String
+  wardId             String
+  boothId            String
+  householdId        String?
+  serialNumber       Int
+  name               String
+  guardianName       String?
+  relationshipType   String?                // FATHER, HUSBAND, MOTHER, OTHER
+  age                Int
+  gender             String                 // M, F, O
+  epicNumber         String                 @unique
+  houseNumber        String
+  roleInHousehold    String?                // Head, Spouse, Son, Daughter, etc.
+  phone              String?
+  photoUrl           String?
+  status             String                 @default("Processed") // Processed, Pending, Anomaly
+  verificationStatus String                 @default("UNVERIFIED") // UNVERIFIED, PENDING, VERIFIED, CORRECTION_REQUIRED, REJECTED
+  version            Int                    @default(1)            // Optimistic locking
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+  campaign           Campaign               @relation(fields: [campaignId], references: [id])
+  ward               Ward                   @relation(fields: [wardId], references: [id])
+  booth              Booth                  @relation(fields: [boothId], references: [id])
+  household          Household?             @relation(fields: [householdId], references: [id])
+  interactions       Interaction[]
+  visEvents          VisEvent[]
+  fieldProvenances   VoterFieldProvenance[]
+}
+
+model VoterFieldProvenance {
+  id             String    @id @default(uuid())
+  voterId        String
+  fieldName      String    // name, age, gender, address, houseNumber, guardianName
+  currentValue   String
+  previousValue  String?
+  sourceType     String    // ELECTORAL_ROLL_OCR, FIELD_AGENT_VERIFIED, ADMIN_CORRECTION
+  sourceRecordId String?
+  sourcePage     Int?
+  confidence     Float     @default(1.0)
+  verifiedById   String?
+  verifiedAt     DateTime?
+  reason         String?
+  createdAt      DateTime  @default(now())
+  voter          Voter     @relation(fields: [voterId], references: [id])
+}
+
+model DuplicateCandidatePair {
+  id               String    @id @default(uuid())
+  campaignId       String
+  voterAId         String
+  voterBId         String
+  similarityScore  Float     // 0.0 - 1.0
+  matchedSignals   String    // JSON: ["NAME_PHONETIC", "GUARDIAN_EXACT", "HOUSE_NO"]
+  status           String    @default("PENDING_REVIEW") // PENDING_REVIEW, CONFIRMED_DUPLICATE, NOT_DUPLICATE, MERGED
+  reviewedById     String?
+  reviewedAt       DateTime?
+  resolutionNotes  String?
+  createdAt        DateTime  @default(now())
+}
+
+// -------------------------------------------------------------
+// FIELD OPERATIONS, TASKS & AUDIT
+// -------------------------------------------------------------
+
+model Assignment {
+  id          String      @id @default(uuid())
+  campaignId  String
+  userId      String
+  createdById String
+  scopeType   String      // WARD, BOOTH, HOUSEHOLDS
+  scopeTarget String      // e.g. "Ward 12, Booth 101"
+  taskType    String      // "Voter Outreach", "Follow-up", "Verification"
+  status      String      @default("Active") // Active, Completed, Inactive
+  notes       String?
+  dueAt       DateTime?
+  createdAt   DateTime    @default(now())
+  campaign    Campaign    @relation(fields: [campaignId], references: [id])
+  user        User        @relation("AssignedTo", fields: [userId], references: [id])
+  createdBy   User        @relation("CreatedBy", fields: [createdById], references: [id])
+}
+
+model Interaction {
+  id          String      @id @default(uuid())
+  campaignId  String
+  householdId String?
+  voterId     String?
+  agentId     String
+  status      String      @default("NOT_VISITED") // NOT_VISITED, ATTEMPTED, CONTACTED, NO_ONE_AVAILABLE, FOLLOW_UP_REQUIRED, DECLINED_CONTACT, VERIFIED
+  notes       String?
+  occurredAt  DateTime    @default(now())
+  household   Household?  @relation(fields: [householdId], references: [id])
+  voter       Voter?      @relation(fields: [voterId], references: [id])
+  agent       User        @relation(fields: [agentId], references: [id])
+}
+
+model Issue {
+  id           String        @id @default(uuid())
+  campaignId   String
+  boothId      String?
+  householdId  String?
+  code         String        @unique // #ISS-2025-001
+  title        String
+  category     String        // "Voter Data", "Verification", "Data Issue", "Field Update", "Voter Response", "Household", "Water", "Road", "Electricity"
+  priority     String        @default("MEDIUM") // LOW, MEDIUM, HIGH, CRITICAL
+  status       String        @default("OPEN") // OPEN, IN_PROGRESS, RESOLVED, ESCALATED
+  description  String
+  reporterId   String
+  assigneeId   String?
+  nextFollowUp DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  campaign     Campaign      @relation(fields: [campaignId], references: [id])
+  booth        Booth?        @relation(fields: [boothId], references: [id])
+  household    Household?    @relation(fields: [householdId], references: [id])
+  reporter     User          @relation("ReportedBy", fields: [reporterId], references: [id])
+  assignee     User?         @relation("AssignedIssue", fields: [assigneeId], references: [id])
+  notes        IssueNote[]
+}
+
+model IssueNote {
+  id         String   @id @default(uuid())
+  issueId    String
+  authorName String
+  content    String
+  createdAt  DateTime @default(now())
+  issue      Issue    @relation(fields: [issueId], references: [id])
+}
+
+// -------------------------------------------------------------
+// STRICTLY DECOUPLED ELECTION-DAY & VIS
+// -------------------------------------------------------------
+
+model VisEvent {
+  id         String   @id @default(uuid())
+  campaignId String
+  voterId    String
+  boothId    String
+  agentId    String
+  eventType  String   @default("ISSUED") // REQUESTED, ISSUED, REPRINTED
+  assistance String?  // "Helped", "Wheelchair", etc.
+  occurredAt DateTime @default(now())
+  campaign   Campaign @relation(fields: [campaignId], references: [id])
+  voter      Voter    @relation(fields: [voterId], references: [id])
+  booth      Booth    @relation(fields: [boothId], references: [id])
+  agent      User     @relation(fields: [agentId], references: [id])
+}
+
+model TurnoutSnapshot {
+  id            String   @id @default(uuid())
+  campaignId    String
+  boothId       String
+  turnoutHour   String   // "7 AM", "8 AM", ...
+  totalReported Int
+  percentage    Float
+  source        String   @default("AUTHORIZED_POLLING_AGENT") // OFFICIAL, AUTHORIZED_POLLING_AGENT
+  recordedAt    DateTime @default(now())
+  campaign      Campaign @relation(fields: [campaignId], references: [id])
+  booth         Booth    @relation(fields: [boothId], references: [id])
+}
+
+// -------------------------------------------------------------
+// PRIVACY GOVERNANCE, AUDIT & MAKER-CHECKER
+// -------------------------------------------------------------
+
+model PrivacyPurpose {
+  id             String       @id @default(uuid())
+  organizationId String
+  code           String       @unique // ELECTORAL_MANAGEMENT, FIELD_VERIFICATION, ISSUE_RESOLUTION, ELECTION_DAY_VIS
+  name           String
+  description    String
+  legalBasis     String
+  retentionDays  Int          @default(365)
+  isActive       Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id])
+}
+
+model RetentionPolicy {
+  id             String       @id @default(uuid())
+  organizationId String
+  entityName     String       // Voter, Interaction, ImportFile, ExportJob, AuditEvent
+  lifecycleStage String       @default("ACTIVE") // ACTIVE, ARCHIVED, RETENTION_HOLD, PURGED
+  retentionDays  Int
+  actionOnExpiry String       @default("ARCHIVE") // ARCHIVE, ANONYMIZE, PURGE
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id])
+}
+
+model PrivacyRequest {
+  id             String       @id @default(uuid())
+  organizationId String
+  requestNumber  String       @unique // DSR-2026-001
+  subjectName    String
+  subjectContact String
+  requestType    String       // ACCESS, CORRECTION, DELETION, OBJECTION
+  status         String       @default("RECEIVED") // RECEIVED, VERIFYING, PROCESSING, COMPLETED, REJECTED
+  details        String
+  resolution     String?
+  receivedAt     DateTime     @default(now())
+  completedAt    DateTime?
+  organization   Organization @relation(fields: [organizationId], references: [id])
+}
+
+model SecurityIncident {
+  id             String       @id @default(uuid())
+  organizationId String
+  incidentNumber String       @unique // SEC-2026-001
+  title          String
+  severity       String       // LOW, MEDIUM, HIGH, CRITICAL
+  status         String       @default("DETECTED") // DETECTED, TRIAGED, CONTAINED, REMEDIATED, CLOSED
+  affectedScope  String
+  discoveredAt   DateTime     @default(now())
+  containedAt    DateTime?
+  resolution     String?
+  organization   Organization @relation(fields: [organizationId], references: [id])
+}
+
+model ApprovalRequest {
+  id              String       @id @default(uuid())
+  organizationId  String
+  campaignId      String?
+  actionType      String       // BULK_CORRECTION, LARGE_EXPORT, BACKUP_RESTORE, ROLE_ESCALATION, RETENTION_PURGE
+  requestedById   String
+  payload         String       // JSON payload of proposed change
+  status          String       @default("REQUESTED") // REQUESTED, APPROVED, REJECTED, EXECUTED
+  reviewedById    String?
+  rejectionReason String?
+  requestedAt     DateTime     @default(now())
+  reviewedAt      DateTime?
+  organization    Organization @relation(fields: [organizationId], references: [id])
+}
+
+model AuditEvent {
+  id             String       @id @default(uuid())
+  organizationId String
+  campaignId     String?
+  actorId        String?
+  action         String
+  resource       String
+  details        String
+  ipAddress      String?
+  hash           String?      // Tamper-evident hash chaining
+  prevHash       String?
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id])
+}
