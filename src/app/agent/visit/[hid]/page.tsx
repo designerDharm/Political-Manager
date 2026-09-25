@@ -16,16 +16,33 @@ import {
 
 export default function MobileVisitPage({ params }: { params: { hid: string } }) {
   const router = useRouter();
-  const [selectedMembers, setSelectedMembers] = useState<string[]>(['1']);
+  const [household, setHousehold] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
   const [visitStatus, setVisitStatus] = useState<string>('VISITED');
   const [saved, setSaved] = useState(false);
 
-  const members = [
-    { id: '1', name: 'Rajesh Kumar', age: 48, gender: 'M' },
-    { id: '2', name: 'Sunita Devi', age: 44, gender: 'F' },
-    { id: '3', name: 'Rahul Kumar', age: 23, gender: 'M' },
-    { id: '4', name: 'Priya Kumari', age: 20, gender: 'F' },
-  ];
+  React.useEffect(() => {
+    async function loadHousehold() {
+      try {
+        const res = await fetch(`/api/v1/households/${params.hid}`);
+        const json = await res.json();
+        if (json.data) {
+          setHousehold(json.data);
+          if (json.data.members && json.data.members.length > 0) {
+            setSelectedMembers([json.data.members[0].id]);
+          }
+        }
+      } catch (e) {
+        console.error('Failed to load household:', e);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadHousehold();
+  }, [params.hid]);
+
+  const members = household?.members || [];
 
   const statuses = [
     { id: 'VISITED', label: 'Visited' },
@@ -46,7 +63,7 @@ export default function MobileVisitPage({ params }: { params: { hid: string } })
     if (selectedMembers.length === members.length) {
       setSelectedMembers([]);
     } else {
-      setSelectedMembers(members.map((m) => m.id));
+      setSelectedMembers(members.map((m: any) => m.id));
     }
   };
 
@@ -112,8 +129,10 @@ export default function MobileVisitPage({ params }: { params: { hid: string } })
         <main className="p-4 space-y-4 flex-1 overflow-y-auto">
           {/* Title */}
           <div>
-            <h1 className="text-xl font-black text-slate-900">Household H-001</h1>
-            <p className="text-xs text-slate-500 font-medium">Ward 12 • Booth 118</p>
+            <h1 className="text-xl font-black text-slate-900">Household {household?.code || params.hid}</h1>
+            <p className="text-xs text-slate-500 font-medium">
+              {household?.booth?.ward?.name || 'Ward'} • {household?.booth?.name || 'Booth'}
+            </p>
           </div>
 
           {/* Household Card */}
@@ -123,22 +142,26 @@ export default function MobileVisitPage({ params }: { params: { hid: string } })
                 Head
               </div>
               <div className="flex-1 min-w-0">
-                <h3 className="text-sm font-bold text-slate-900 leading-tight">Rajesh Kumar Family</h3>
+                <h3 className="text-sm font-bold text-slate-900 leading-tight">
+                  {household?.primaryContactName ? `${household.primaryContactName} Family` : (household?.members?.[0]?.name ? `${household.members[0].name} Family` : 'Household')}
+                </h3>
                 <p className="text-[11px] text-slate-500 mt-1 leading-snug">
-                  House No. 12, Gandhi Nagar, Ward 12 • Near Hanuman Mandir
+                  {household?.address || 'Address unlisted'}
                 </p>
               </div>
             </div>
 
             <div className="flex items-center gap-2 pt-1 border-t border-slate-200/60">
               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-100/70 text-blue-700 text-[10px] font-bold">
-                <Home className="w-3 h-3" /> H-001
+                <Home className="w-3 h-3" /> {household?.code || params.hid}
               </span>
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-100/70 text-emerald-800 text-[10px] font-bold">
-                <Check className="w-3 h-3" /> Verified
+              <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                household?.status === 'Verified' ? 'bg-emerald-100/70 text-emerald-800' : 'bg-amber-100/70 text-amber-800'
+              }`}>
+                <Check className="w-3 h-3" /> {household?.status || 'Pending'}
               </span>
               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-slate-200/70 text-slate-700 text-[10px] font-bold">
-                <Cpu className="w-3 h-3" /> AI Confidence: 91%
+                <Cpu className="w-3 h-3" /> AI Confidence: {household?.aiConfidence || 95}%
               </span>
             </div>
           </div>
@@ -153,7 +176,7 @@ export default function MobileVisitPage({ params }: { params: { hid: string } })
             </div>
 
             <div className="bg-white border border-slate-200 rounded-2xl divide-y divide-slate-100 overflow-hidden">
-              {members.map((m) => {
+              {members.map((m: any) => {
                 const isChecked = selectedMembers.includes(m.id);
                 return (
                   <div

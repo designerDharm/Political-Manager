@@ -16,22 +16,34 @@ import {
 
 export default function AgentSearchPage() {
   const [searchTerm, setSearchTerm] = useState('');
+  const [voters, setVoters] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  const mockVoters = [
-    { id: 'v-01', name: 'Rajesh Kumar', epic: 'ABC1234567', household: 'H-001', booth: '101', status: 'Verified' },
-    { id: 'v-02', name: 'Sunita Devi', epic: 'ABC1234568', household: 'H-001', booth: '101', status: 'Verified' },
-    { id: 'v-03', name: 'Rahul Kumar', epic: 'ABC1234569', household: 'H-001', booth: '101', status: 'Verified' },
-    { id: 'v-04', name: 'Priya Kumari', epic: 'ABC1234570', household: 'H-001', booth: '101', status: 'Verified' },
-    { id: 'v-05', name: 'Amit Sharma', epic: 'DEF9876543', household: 'H-002', booth: '102', status: 'Pending' },
-    { id: 'v-06', name: 'Pooja Sharma', epic: 'DEF9876544', household: 'H-002', booth: '102', status: 'Pending' },
-  ];
+  React.useEffect(() => {
+    async function searchElectors() {
+      setLoading(true);
+      try {
+        const queryParam = searchTerm.trim() ? `?q=${encodeURIComponent(searchTerm.trim())}` : '';
+        const res = await fetch(`/api/v1/voters${queryParam}`);
+        const json = await res.json();
+        if (json.data && Array.isArray(json.data)) {
+          setVoters(json.data);
+        }
+      } catch (err) {
+        console.error('Failed to search voters:', err);
+      } finally {
+        setLoading(false);
+      }
+    }
 
-  const filtered = mockVoters.filter(
-    (v) =>
-      v.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      v.epic.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      v.household.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+    const timer = setTimeout(() => {
+      searchElectors();
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
+  const filtered = voters;
 
   return (
     <div className="min-h-screen bg-slate-50 flex justify-center">
@@ -66,36 +78,40 @@ export default function AgentSearchPage() {
           </div>
 
           <div className="space-y-2">
-            {filtered.map((v) => (
-              <Link
-                key={v.id}
-                href="/agent/visit/H-001"
-                className="p-3 border border-slate-100 rounded-xl bg-slate-50/60 hover:bg-blue-50/40 hover:border-blue-200 transition flex items-center justify-between block"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-full bg-blue-100 text-blue-700 font-bold flex items-center justify-center text-xs">
-                    {v.name.slice(0, 1)}
+            {filtered.map((v) => {
+              const hid = v.household?.code || v.householdId || 'H-001';
+              const status = v.household?.status || 'Pending';
+              return (
+                <Link
+                  key={v.id}
+                  href={`/agent/visit/${hid}`}
+                  className="p-3 border border-slate-100 rounded-xl bg-slate-50/60 hover:bg-blue-50/40 hover:border-blue-200 transition flex items-center justify-between block"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-full bg-blue-100 text-blue-700 font-bold flex items-center justify-center text-xs">
+                      {v.name.slice(0, 1)}
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-900">{v.name}</h4>
+                      <p className="text-[11px] text-slate-500 font-mono">
+                        EPIC: {v.epicNumber || 'N/A'} • {v.household?.code || `House #${v.houseNumber}`}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <h4 className="text-xs font-bold text-slate-900">{v.name}</h4>
-                    <p className="text-[11px] text-slate-500 font-mono">
-                      EPIC: {v.epic} • {v.household}
-                    </p>
-                  </div>
-                </div>
 
-                <div className="flex items-center gap-2">
-                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                    v.status === 'Verified'
-                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                      : 'bg-amber-50 text-amber-700 border border-amber-200'
-                  }`}>
-                    {v.status}
-                  </span>
-                  <ChevronRight className="w-4 h-4 text-slate-400" />
-                </div>
-              </Link>
-            ))}
+                  <div className="flex items-center gap-2">
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                      status === 'Verified'
+                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                        : 'bg-amber-50 text-amber-700 border border-amber-200'
+                    }`}>
+                      {status}
+                    </span>
+                    <ChevronRight className="w-4 h-4 text-slate-400" />
+                  </div>
+                </Link>
+              );
+            })}
           </div>
         </main>
 

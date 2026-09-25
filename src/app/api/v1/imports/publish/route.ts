@@ -117,8 +117,9 @@ export async function POST(req: NextRequest) {
       createdHouseholds.push(hh);
     }
 
-    // 4. Ensure Voters exist
-    const sampleVoters = [
+    // 4. Extract or accept provided voters list
+    const incomingVoters = body.voters && Array.isArray(body.voters) && body.voters.length > 0 ? body.voters : null;
+    const sampleVoters = incomingVoters || [
       {
         serialNumber: 1,
         name: 'Rajesh Kumar',

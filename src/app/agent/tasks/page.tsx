@@ -17,7 +17,7 @@ import {
 export const revalidate = 0;
 
 export default async function AgentTasksPage() {
-  const [tasks, completedCount, pendingCount] = await Promise.all([
+  const [tasks, completedCount, pendingCount, firstHousehold] = await Promise.all([
     prisma.assignment.findMany({
       include: {
         campaign: true,
@@ -26,7 +26,10 @@ export default async function AgentTasksPage() {
     }),
     prisma.assignment.count({ where: { status: 'Completed' } }),
     prisma.assignment.count({ where: { status: 'Active' } }),
+    prisma.household.findFirst({ orderBy: { code: 'asc' } }),
   ]);
+
+  const targetHid = firstHousehold?.code || 'H-001';
 
   return (
     <div className="min-h-screen bg-slate-50 flex justify-center">
@@ -96,7 +99,7 @@ export default async function AgentTasksPage() {
                     <MapPin className="w-3 h-3 text-slate-400" /> Ward 12, Booth 101
                   </span>
                   <Link
-                    href="/agent/visit/H-001"
+                    href={`/agent/visit/${targetHid}`}
                     className="text-xs font-bold text-blue-600 flex items-center gap-0.5 hover:underline"
                   >
                     Start Visit <ChevronRight className="w-3.5 h-3.5" />
