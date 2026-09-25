@@ -24,15 +24,25 @@ export default async function VoterListPage({
   params: { id: string };
   searchParams?: { q?: string; gender?: string; ward?: string };
 }) {
-  const voters = await prisma.voter.findMany({
-    take: 10,
-    orderBy: { serialNumber: 'asc' },
-    include: {
-      household: true,
-      ward: true,
-      booth: true,
-    },
-  });
+  const [totalVoters, totalHouseholds, processedCount, voters, campaignWards] = await Promise.all([
+    prisma.voter.count({ where: { campaignId: params.id } }),
+    prisma.household.count({ where: { campaignId: params.id } }),
+    prisma.voter.count({ where: { campaignId: params.id, status: 'Processed' } }),
+    prisma.voter.findMany({
+      where: { campaignId: params.id },
+      take: 25,
+      orderBy: { serialNumber: 'asc' },
+      include: {
+        household: true,
+        ward: true,
+        booth: true,
+      },
+    }),
+    prisma.ward.findMany({ where: { campaignId: params.id } }),
+  ]);
+
+  const activeWardName = campaignWards[0]?.name || 'Ward 12';
+  const processedPercent = totalVoters > 0 ? Math.round((processedCount / totalVoters) * 100) : 100;
 
   return (
     <div className="flex min-h-screen bg-slate-50">
@@ -61,14 +71,14 @@ export default async function VoterListPage({
             <div className="flex items-center gap-2">
               <div className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-800 shadow-sm">
                 <MapPin className="w-3.5 h-3.5 text-blue-600" />
-                <span>Ward 12</span>
+                <span>{activeWardName}</span>
               </div>
             </div>
           </div>
 
           {/* Title & Subtitle */}
           <div className="mb-6">
-            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Voters - Ward 12 (AI Processed)</h1>
+            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Voters - {activeWardName} (AI Processed)</h1>
             <p className="text-xs text-slate-500 mt-1">
               View and manage the AI-processed voter list with household mapping and verification status.
             </p>
@@ -79,7 +89,7 @@ export default async function VoterListPage({
             <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-card flex items-center justify-between">
               <div>
                 <span className="text-xs font-medium text-slate-500 block mb-1">Total Voters</span>
-                <span className="text-2xl font-bold text-slate-900">2,840</span>
+                <span className="text-2xl font-bold text-slate-900">{totalVoters.toLocaleString()}</span>
               </div>
               <div className="w-11 h-11 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
                 <Users className="w-6 h-6" />
@@ -89,7 +99,7 @@ export default async function VoterListPage({
             <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-card flex items-center justify-between">
               <div>
                 <span className="text-xs font-medium text-slate-500 block mb-1">Households</span>
-                <span className="text-2xl font-bold text-slate-900">892</span>
+                <span className="text-2xl font-bold text-slate-900">{totalHouseholds.toLocaleString()}</span>
               </div>
               <div className="w-11 h-11 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
                 <Home className="w-6 h-6" />
@@ -100,12 +110,12 @@ export default async function VoterListPage({
               <div>
                 <span className="text-xs font-medium text-slate-500 block mb-1">Processed</span>
                 <div className="flex items-baseline gap-1.5">
-                  <span className="text-2xl font-bold text-slate-900">2,840</span>
-                  <span className="text-xs text-slate-400 font-medium">(100%)</span>
+                  <span className="text-2xl font-bold text-slate-900">{processedCount.toLocaleString()}</span>
+                  <span className="text-xs text-slate-400 font-medium">({processedPercent}%)</span>
                 </div>
               </div>
               <div className="w-12 h-12 rounded-full border-4 border-emerald-500 flex items-center justify-center text-xs font-bold text-emerald-600">
-                100%
+                {processedPercent}%
               </div>
             </div>
           </div>
@@ -159,52 +169,67 @@ export default async function VoterListPage({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {voters.map((voter) => (
-                    <tr key={voter.id} className="hover:bg-slate-50/80 transition">
-                      <td className="p-3.5 text-center">
-                        <input type="checkbox" className="rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
-                      </td>
-                      <td className="p-3.5 text-center font-medium text-slate-500">{voter.serialNumber}</td>
-                      <td className="p-3.5 font-bold text-slate-900">{voter.name}</td>
-                      <td className="p-3.5 text-slate-600">{voter.age}</td>
-                      <td className="p-3.5 text-slate-600">{voter.gender}</td>
-                      <td className="p-3.5 font-mono text-slate-700">{voter.epicNumber}</td>
-                      <td className="p-3.5 text-slate-600">{voter.houseNumber}</td>
-                      <td className="p-3.5">
+                  {voters.length === 0 ? (
+                    <tr>
+                      <td colSpan={10} className="p-8 text-center text-slate-500">
+                        <p className="font-semibold text-sm text-slate-700">No voters found in database yet.</p>
+                        <p className="text-xs text-slate-400 mt-1">Upload Electoral Roll PDF/CSV in Ingestion Center and click Publish.</p>
                         <Link
-                          href={`/campaigns/${params.id}/households/${voter.household?.id || 'H-001'}`}
-                          className="font-semibold text-blue-600 hover:underline"
+                          href={`/campaigns/${params.id}/voters/upload`}
+                          className="mt-3 inline-block py-1.5 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold"
                         >
-                          {voter.household?.code || 'H-001'}
+                          Go to Upload Center
                         </Link>
                       </td>
-                      <td className="p-3.5">
-                        {voter.status === 'Processed' ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                            Processed
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-rose-50 text-rose-700 border border-rose-200">
-                            <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
-                            Pending
-                          </span>
-                        )}
-                      </td>
-                      <td className="p-3.5 text-right">
-                        <button className="p-1 text-slate-400 hover:text-slate-600 rounded">
-                          <MoreVertical className="w-4 h-4" />
-                        </button>
-                      </td>
                     </tr>
-                  ))}
+                  ) : (
+                    voters.map((voter) => (
+                      <tr key={voter.id} className="hover:bg-slate-50/80 transition">
+                        <td className="p-3.5 text-center">
+                          <input type="checkbox" className="rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
+                        </td>
+                        <td className="p-3.5 text-center font-medium text-slate-500">{voter.serialNumber}</td>
+                        <td className="p-3.5 font-bold text-slate-900">{voter.name}</td>
+                        <td className="p-3.5 text-slate-600">{voter.age}</td>
+                        <td className="p-3.5 text-slate-600">{voter.gender}</td>
+                        <td className="p-3.5 font-mono text-slate-700">{voter.epicNumber}</td>
+                        <td className="p-3.5 text-slate-600">{voter.houseNumber}</td>
+                        <td className="p-3.5">
+                          <Link
+                            href={`/campaigns/${params.id}/households/${voter.household?.id || 'H-001'}`}
+                            className="font-semibold text-blue-600 hover:underline"
+                          >
+                            {voter.household?.code || 'H-001'}
+                          </Link>
+                        </td>
+                        <td className="p-3.5">
+                          {voter.status === 'Processed' ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                              Processed
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-rose-50 text-rose-700 border border-rose-200">
+                              <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                              Pending
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-3.5 text-right">
+                          <button className="p-1 text-slate-400 hover:text-slate-600 rounded">
+                            <MoreVertical className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
 
             {/* Pagination Controls */}
             <div className="p-4 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
-              <span>Showing 1 to 10 of 2,840 voters</span>
+              <span>Showing 1 to {voters.length} of {totalVoters.toLocaleString()} voters</span>
 
               <div className="flex items-center gap-2">
                 <select className="border border-slate-200 rounded-lg px-2.5 py-1 text-xs bg-slate-50">

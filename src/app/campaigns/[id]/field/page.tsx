@@ -121,12 +121,12 @@ export default async function FieldOperationsPage({ params }: { params: { id: st
             />
             <StatCard
               title="Coverage Rate"
-              value={`${totalHouseholds > 0 ? ((verifiedCount / totalHouseholds) * 100).toFixed(0) : 75}%`}
+              value={`${totalHouseholds > 0 ? ((verifiedCount / totalHouseholds) * 100).toFixed(0) : 0}%`}
               subtitle="Target: 90% by campaign close"
               icon={PieChart}
               iconColor="text-amber-600"
               iconBgColor="bg-amber-50"
-              badge={{ text: 'Pacing on track', type: 'info' }}
+              badge={{ text: totalHouseholds > 0 ? 'Pacing on track' : 'No Data', type: 'info' }}
             />
           </div>
 
@@ -160,37 +160,45 @@ export default async function FieldOperationsPage({ params }: { params: { id: st
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {booths.map((b) => (
-                      <tr key={b.id} className="hover:bg-slate-50/80 transition">
-                        <td className="py-3 px-3 font-semibold text-slate-900">
-                          <div>Booth #{b.boothNumber}</div>
-                          <div className="text-[10px] text-slate-400 font-normal">{b.name}</div>
-                        </td>
-                        <td className="py-3 px-3 text-slate-600 font-medium">Ward {b.ward?.wardNumber || '12'}</td>
-                        <td className="py-3 px-3 font-mono text-slate-700">{b._count.households || 45}</td>
-                        <td className="py-3 px-3 font-mono text-slate-700">{b._count.voters || b.totalElectors}</td>
-                        <td className="py-3 px-3">
-                          <div className="flex items-center gap-2">
-                            <div className="w-20 bg-slate-100 rounded-full h-1.5 overflow-hidden">
-                              <div className="bg-emerald-500 h-full rounded-full" style={{ width: '74%' }} />
+
+                    {booths.map((b) => {
+                      const boothHouseholds = b._count?.households || 0;
+                      const boothVoters = b._count?.voters || 0;
+                      const progressPct = boothHouseholds > 0 ? Math.round((boothHouseholds / (b.totalElectors > 0 ? b.totalElectors : 10)) * 100) : 0;
+
+                      return (
+                        <tr key={b.id} className="hover:bg-slate-50/80 transition">
+                          <td className="py-3 px-3 font-semibold text-slate-900">
+                            <div>Booth #{b.boothNumber}</div>
+                            <div className="text-[10px] text-slate-400 font-normal">{b.name}</div>
+                          </td>
+                          <td className="py-3 px-3 text-slate-600 font-medium">{b.ward?.name || `Ward ${b.ward?.wardNumber || '12'}`}</td>
+                          <td className="py-3 px-3 font-mono text-slate-700">{boothHouseholds}</td>
+                          <td className="py-3 px-3 font-mono text-slate-700">{boothVoters}</td>
+                          <td className="py-3 px-3">
+                            <div className="flex items-center gap-2">
+                              <div className="w-20 bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                                <div className="bg-emerald-500 h-full rounded-full transition-all" style={{ width: `${Math.min(100, progressPct)}%` }} />
+                              </div>
+                              <span className="text-[10px] font-bold text-slate-600">{progressPct}%</span>
                             </div>
-                            <span className="text-[10px] font-bold text-slate-600">74%</span>
-                          </div>
-                        </td>
-                        <td className="py-3 px-3 text-right">
-                          <Link
-                            href={`/campaigns/${params.id}/voters?boothId=${b.id}`}
-                            className="text-[11px] text-blue-600 font-bold hover:underline"
-                          >
-                            Inspect
-                          </Link>
-                        </td>
-                      </tr>
-                    ))}
+                          </td>
+                          <td className="py-3 px-3 text-right">
+                            <Link
+                              href={`/campaigns/${params.id}/voters?boothId=${b.id}`}
+                              className="text-[11px] text-blue-600 font-bold hover:underline"
+                            >
+                              Inspect
+                            </Link>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
             </div>
+
 
             {/* Quick Field Assignments (1 col) */}
             <div className="bg-white rounded-xl border border-slate-200 shadow-card p-6">

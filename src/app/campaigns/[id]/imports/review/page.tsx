@@ -38,6 +38,33 @@ export default function ImportReviewCenterPage({ params }: { params: { id: strin
     { id: 2, field: 'House Number', extracted: '12/A?', confidence: '68%', page: 7, row: 3, suggested: '12/A' },
   ];
 
+  const [publishing, setPublishing] = useState(false);
+  const [publishSuccess, setPublishSuccess] = useState('');
+  const [error, setError] = useState('');
+
+  const handlePublish = async () => {
+    setPublishing(true);
+    setError('');
+    try {
+      const res = await fetch('/api/v1/imports/publish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ campaignId: params.id }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error?.message || 'Publishing failed');
+
+      setPublishSuccess(`Successfully published ${json.data.publishedVoters} voters and ${json.data.publishedHouseholds} households into Database SSoT!`);
+      setTimeout(() => {
+        window.location.href = `/campaigns/${params.id}/voters`;
+      }, 1200);
+    } catch (e: any) {
+      setError(e.message || 'Error publishing records');
+    } finally {
+      setPublishing(false);
+    }
+  };
+
   return (
     <div className="flex min-h-screen bg-slate-50">
       <Sidebar role="CAMPAIGN_ADMIN" campaignId={params.id} />
@@ -58,7 +85,7 @@ export default function ImportReviewCenterPage({ params }: { params: { id: strin
                 <span>&gt;</span>
                 <span>Imports</span>
                 <span>&gt;</span>
-                <span className="text-slate-900 font-semibold">Job #IMP-2026-001 Review</span>
+                <span className="text-slate-900 font-semibold">Job Review</span>
               </div>
               <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Electoral Roll AI Review Center</h1>
               <p className="text-xs text-slate-500 mt-1">
@@ -67,11 +94,38 @@ export default function ImportReviewCenterPage({ params }: { params: { id: strin
             </div>
 
             <div className="flex items-center gap-2">
-              <button className="py-2 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-md shadow-emerald-500/20 transition flex items-center gap-1.5">
-                <Check className="w-4 h-4" /> Publish Verified Records
+              <button
+                type="button"
+                onClick={handlePublish}
+                disabled={publishing}
+                className="py-2 px-4 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold shadow-md shadow-emerald-500/20 transition flex items-center gap-1.5"
+              >
+                {publishing ? (
+                  <>
+                    <RotateCw className="w-4 h-4 animate-spin text-white" />
+                    <span>Publishing to SSoT...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-4 h-4" />
+                    <span>Publish Verified Records</span>
+                  </>
+                )}
               </button>
             </div>
           </div>
+
+          {publishSuccess && (
+            <div className="p-4 mb-6 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-800 text-xs font-semibold">
+              {publishSuccess}
+            </div>
+          )}
+
+          {error && (
+            <div className="p-4 mb-6 rounded-xl border border-rose-200 bg-rose-50 text-rose-800 text-xs font-semibold">
+              {error}
+            </div>
+          )}
 
           {/* 9-Stage Pipeline Stepper */}
           <div className="bg-white rounded-xl border border-slate-200 p-4 mb-8 shadow-card overflow-x-auto">

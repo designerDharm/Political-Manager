@@ -22,15 +22,31 @@ import { prisma } from '@/lib/prisma';
 export const revalidate = 0;
 
 export default async function AnalyticsPage({ params }: { params: { id: string } }) {
-  const [voterCount, householdCount, visitedCount, issueCount] = await Promise.all([
+  const [voterCount, householdCount, visitedCount, issueCount, wards, booths] = await Promise.all([
     prisma.voter.count({ where: { campaignId: params.id } }),
     prisma.household.count({ where: { campaignId: params.id } }),
     prisma.household.count({ where: { campaignId: params.id, status: 'Verified' } }),
     prisma.issue.count({ where: { campaignId: params.id } }),
+    prisma.ward.findMany({
+      where: { campaignId: params.id },
+      include: {
+        _count: { select: { voters: true, booths: true } },
+      },
+      orderBy: { wardNumber: 'asc' },
+    }),
+
+    prisma.booth.findMany({
+      where: { campaignId: params.id },
+      include: {
+        _count: { select: { voters: true, households: true } },
+      },
+      orderBy: { boothNumber: 'asc' },
+    }),
   ]);
 
   const pendingCount = Math.max(0, householdCount - visitedCount);
   const coveragePercent = householdCount > 0 ? Math.round((visitedCount / householdCount) * 100) : 0;
+
 
   return (
     <div className="flex min-h-screen bg-slate-50">
@@ -122,43 +138,47 @@ export default async function AnalyticsPage({ params }: { params: { id: string }
           {/* Chart Grid: Ward-wise Coverage Bars & Booth Completion Trend */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
             
-            {/* Ward-wise Coverage Bar Chart directly matching screenshot */}
+            {/* Ward-wise Coverage Bar Chart directly driven by database SSoT */}
             <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-card">
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <h3 className="text-sm font-bold text-slate-900">Ward-wise Coverage</h3>
-                  <p className="text-[11px] text-slate-500">Voter coverage across all wards</p>
+                  <p className="text-[11px] text-slate-500">Live voter coverage across campaign wards</p>
                 </div>
-                <select className="border border-slate-200 rounded-lg px-2.5 py-1 text-xs bg-slate-50">
-                  <option>Coverage %</option>
-                </select>
+                <div className="text-xs font-semibold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-lg">
+                  {wards.length} {wards.length === 1 ? 'Ward Mapped' : 'Wards Mapped'}
+                </div>
               </div>
 
               {/* Bar visualization */}
-              <div className="h-56 flex items-end justify-between gap-2 pt-6 pb-2 border-b border-slate-100">
-                {[
-                  { ward: 'W 1', pct: 78, color: 'bg-blue-500' },
-                  { ward: 'W 2', pct: 62, color: 'bg-blue-400' },
-                  { ward: 'W 3', pct: 91, color: 'bg-emerald-500' },
-                  { ward: 'W 4', pct: 55, color: 'bg-amber-400' },
-                  { ward: 'W 5', pct: 83, color: 'bg-blue-500' },
-                  { ward: 'W 6', pct: 69, color: 'bg-blue-400' },
-                  { ward: 'W 7', pct: 88, color: 'bg-emerald-500' },
-                  { ward: 'W 8', pct: 74, color: 'bg-blue-400' },
-                  { ward: 'W 9', pct: 59, color: 'bg-amber-400' },
-                  { ward: 'W 10', pct: 95, color: 'bg-emerald-500' },
-                  { ward: 'W 11', pct: 67, color: 'bg-blue-400' },
-                  { ward: 'W 12', pct: 81, color: 'bg-blue-600' },
-                ].map((item) => (
-                  <div key={item.ward} className="flex-1 flex flex-col items-center gap-1.5 h-full justify-end">
-                    <span className="text-[10px] font-bold text-slate-700">{item.pct}%</span>
-                    <div
-                      className={`w-full rounded-t-md transition-all ${item.color}`}
-                      style={{ height: `${item.pct * 1.8}px` }}
-                    />
-                    <span className="text-[10px] text-slate-400 mt-1">{item.ward}</span>
+              <div className="h-56 flex items-end justify-between gap-3 pt-6 pb-2 border-b border-slate-100">
+                {wards.length === 0 ? (
+                  <div className="w-full h-full flex flex-col items-center justify-center text-slate-400 text-xs">
+                    <BarChart3 className="w-8 h-8 text-slate-300 mb-2" />
+                    <span>No wards registered yet. Upload electoral roll to display coverage.</span>
                   </div>
-                ))}
+                ) : (
+                  wards.map((w) => {
+                    const wardVoters = w._count?.voters || 0;
+                    const pct = wardVoters > 0 ? Math.min(100, Math.round((visitedCount / wardVoters) * 100)) : 0;
+                    const color = pct >= 80 ? 'bg-emerald-500' : pct >= 50 ? 'bg-blue-600' : 'bg-amber-400';
+
+
+                    return (
+                      <div key={w.id} className="flex-1 flex flex-col items-center gap-1.5 h-full justify-end max-w-[80px]">
+                        <span className="text-[11px] font-bold text-slate-700">{pct}%</span>
+                        <div
+                          className={`w-full rounded-t-md transition-all ${color}`}
+                          style={{ height: `${Math.max(12, pct * 1.8)}px` }}
+                        />
+                        <span className="text-[11px] text-slate-600 font-semibold mt-1 truncate max-w-[70px] text-center">
+                          {w.name.replace(' - Central', '')}
+                        </span>
+                        <span className="text-[9px] text-slate-400">{wardVoters} voters</span>
+                      </div>
+                    );
+                  })
+                )}
               </div>
             </div>
 
@@ -166,35 +186,53 @@ export default async function AnalyticsPage({ params }: { params: { id: string }
             <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-card">
               <div className="flex items-center justify-between mb-4">
                 <div>
-                  <h3 className="text-sm font-bold text-slate-900">Booth Completion Trend</h3>
-                  <p className="text-[11px] text-slate-500">Daily booth completion progress</p>
+                  <h3 className="text-sm font-bold text-slate-900">Booth Completion Status</h3>
+                  <p className="text-[11px] text-slate-500">Live polling booth door-to-door completion</p>
                 </div>
                 <div className="flex items-center gap-3 text-[11px]">
-                  <span className="flex items-center gap-1 text-blue-600"><span className="w-2 h-2 rounded-full bg-blue-600" /> Visited</span>
-                  <span className="flex items-center gap-1 text-emerald-600"><span className="w-2 h-2 rounded-full bg-emerald-500" /> Completed</span>
-                  <span className="flex items-center gap-1 text-amber-600"><span className="w-2 h-2 rounded-full bg-amber-500" /> Pending</span>
+                  <span className="flex items-center gap-1 text-blue-600 font-semibold"><span className="w-2 h-2 rounded-full bg-blue-600" /> {visitedCount} Visited</span>
+                  <span className="flex items-center gap-1 text-emerald-600 font-semibold"><span className="w-2 h-2 rounded-full bg-emerald-500" /> {visitedCount} Completed</span>
+                  <span className="flex items-center gap-1 text-amber-600 font-semibold"><span className="w-2 h-2 rounded-full bg-amber-500" /> {pendingCount} Pending</span>
                 </div>
               </div>
 
-              <div className="h-56 relative flex items-center justify-center border-b border-slate-100">
-                <svg viewBox="0 0 500 200" className="w-full h-full">
-                  <path d="M 10 170 Q 150 140 250 100 T 490 30" fill="none" stroke="#2563EB" strokeWidth="3" />
-                  <path d="M 10 180 Q 150 160 250 130 T 490 60" fill="none" stroke="#10B981" strokeWidth="3" />
-                  <path d="M 10 190 Q 150 180 250 170 T 490 140" fill="none" stroke="#F59E0B" strokeWidth="2" strokeDasharray="4 4" />
-                </svg>
-              </div>
+              {booths.length === 0 ? (
+                <div className="h-56 flex flex-col items-center justify-center text-slate-400 text-xs border-b border-slate-100">
+                  <PieChart className="w-8 h-8 text-slate-300 mb-2" />
+                  <span>No booths mapped yet.</span>
+                </div>
+              ) : (
+                <div className="h-56 flex flex-col justify-center space-y-4 pt-2 border-b border-slate-100">
+                  {booths.map((b) => {
+                    const bHouseholds = b._count?.households || 0;
+                    const bVoters = b._count?.voters || 0;
+                    const pct = bHouseholds > 0 ? Math.round((visitedCount / bHouseholds) * 100) : 0;
+
+                    return (
+                      <div key={b.id} className="space-y-1.5">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-bold text-slate-800">Booth #{b.boothNumber} - {b.name}</span>
+                          <span className="font-mono text-slate-500 text-[11px]">{bVoters} Electors ({pct}%)</span>
+                        </div>
+                        <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
+                          <div
+                            className="bg-blue-600 h-full rounded-full transition-all"
+                            style={{ width: `${Math.min(100, pct)}%` }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
               <div className="flex justify-between text-[10px] text-slate-400 mt-2">
-                <span>Jan 1</span>
-                <span>Jan 5</span>
-                <span>Jan 10</span>
-                <span>Jan 15</span>
-                <span>Jan 20</span>
-                <span>Jan 25</span>
-                <span>Jan 30</span>
+                <span>Active Campaign SSoT</span>
+                <span>Real-Time Database Sync</span>
               </div>
             </div>
 
           </div>
+
 
           {/* Governed AI Analytics Interface */}
           <GovernedAiAssistant campaignId={params.id} />

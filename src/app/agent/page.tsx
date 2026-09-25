@@ -16,7 +16,24 @@ import {
   Shield,
 } from 'lucide-react';
 
-export default function AgentHomePage() {
+import { prisma } from '@/lib/prisma';
+
+export const revalidate = 0;
+
+export default async function AgentHomePage() {
+  const [activeCampaign, totalHouseholds, completedHouseholds, firstHousehold, assignment] = await Promise.all([
+    prisma.campaign.findFirst({ where: { status: 'ACTIVE' } }),
+    prisma.household.count(),
+    prisma.household.count({ where: { status: 'Verified' } }),
+    prisma.household.findFirst({ orderBy: { code: 'asc' } }),
+    prisma.assignment.findFirst({ orderBy: { createdAt: 'desc' }, include: { user: true } }),
+  ]);
+
+  const pendingHouseholds = Math.max(0, totalHouseholds - completedHouseholds);
+  const targetHid = firstHousehold?.code || 'H-001';
+  const assignedAgentName = assignment?.user?.displayName || 'Rakesh';
+  const assignedArea = assignment?.scopeTarget ? `${assignment.scopeType}: ${assignment.scopeTarget}` : 'Ward 12 • Booth 118';
+
   return (
     <div className="min-h-screen bg-slate-50 flex justify-center">
       {/* Mobile container matching dashboard _ Mobile view.png */}
@@ -45,9 +62,9 @@ export default function AgentHomePage() {
           <div className="flex items-baseline justify-between pt-1">
             <div>
               <h1 className="text-xl font-black text-slate-900">
-                Good Morning, <span className="text-blue-600">Rakesh</span>
+                Good Morning, <span className="text-blue-600">{assignedAgentName}</span>
               </h1>
-              <p className="text-xs text-slate-400 font-medium">Thu, 25 Sep 2025</p>
+              <p className="text-xs text-slate-400 font-medium">Field Operations Active</p>
             </div>
           </div>
 
@@ -58,7 +75,7 @@ export default function AgentHomePage() {
                 Today&apos;s Assigned Area
               </span>
               <h2 className="text-lg font-black text-slate-900">
-                Ward 12 <span className="text-emerald-500 font-bold">•</span> Booth 118
+                {assignedArea}
               </h2>
             </div>
             <button className="px-3.5 py-1.5 bg-white border border-emerald-300 text-emerald-800 rounded-xl text-xs font-bold shadow-sm hover:bg-emerald-50 transition">
@@ -66,13 +83,13 @@ export default function AgentHomePage() {
             </button>
           </div>
 
-          {/* 3 Quick Metrics directly matching screenshot */}
+          {/* 3 Quick Metrics directly sourced from database SSoT */}
           <div className="grid grid-cols-3 gap-2.5">
             <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-3 text-center">
               <div className="w-8 h-8 rounded-xl bg-blue-100/70 text-blue-600 flex items-center justify-center mx-auto mb-1.5">
                 <Home className="w-4 h-4" />
               </div>
-              <span className="text-lg font-black text-slate-900 block leading-tight">124</span>
+              <span className="text-lg font-black text-slate-900 block leading-tight">{totalHouseholds}</span>
               <span className="text-[10px] text-slate-500 font-medium">Households</span>
             </div>
 
@@ -80,7 +97,7 @@ export default function AgentHomePage() {
               <div className="w-8 h-8 rounded-xl bg-emerald-100/70 text-emerald-600 flex items-center justify-center mx-auto mb-1.5">
                 <CheckCircle2 className="w-4 h-4" />
               </div>
-              <span className="text-lg font-black text-slate-900 block leading-tight">67</span>
+              <span className="text-lg font-black text-slate-900 block leading-tight">{completedHouseholds}</span>
               <span className="text-[10px] text-slate-500 font-medium">Completed</span>
             </div>
 
@@ -88,14 +105,14 @@ export default function AgentHomePage() {
               <div className="w-8 h-8 rounded-xl bg-rose-100/70 text-rose-600 flex items-center justify-center mx-auto mb-1.5">
                 <Clock className="w-4 h-4" />
               </div>
-              <span className="text-lg font-black text-slate-900 block leading-tight">57</span>
+              <span className="text-lg font-black text-slate-900 block leading-tight">{pendingHouseholds}</span>
               <span className="text-[10px] text-slate-500 font-medium">Pending</span>
             </div>
           </div>
 
           {/* Big "Start Visit" CTA Button */}
           <Link
-            href="/agent/visit/H-001"
+            href={`/agent/visit/${targetHid}`}
             className="w-full py-3.5 px-6 bg-blue-600 hover:bg-blue-700 active:scale-[0.99] text-white rounded-2xl font-bold text-sm shadow-md shadow-blue-500/30 flex items-center justify-center gap-2 transition"
           >
             <Play className="w-4 h-4 fill-white" />
