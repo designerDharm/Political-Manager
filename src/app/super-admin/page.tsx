@@ -22,12 +22,25 @@ export const revalidate = 0; // Dynamic data directly from DB Single Source of T
 
 export default async function SuperAdminDashboard() {
   // Query dynamic database counts to guarantee SSoT
-  const [orgCount, campaignCount, userCount, importCount] = await Promise.all([
-    prisma.organization.count(),
-    prisma.campaign.count(),
-    prisma.user.count(),
-    prisma.electoralRollImport.count(),
-  ]);
+  let orgCount = 0;
+  let campaignCount = 0;
+  let userCount = 0;
+  let importCount = 0;
+
+  try {
+    const counts = await Promise.all([
+      prisma.organization.count(),
+      prisma.campaign.count(),
+      prisma.user.count(),
+      prisma.electoralRollImport.count(),
+    ]);
+    orgCount = counts[0];
+    campaignCount = counts[1];
+    userCount = counts[2];
+    importCount = counts[3];
+  } catch (err) {
+    console.error('Database connection error in SuperAdminDashboard:', err);
+  }
 
   const recentActivities = [
     {
