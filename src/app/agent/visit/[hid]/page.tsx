@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -12,7 +12,15 @@ import {
   FileText,
   Save,
   Check,
+  AlertCircle,
+  Plus,
+  X,
+  RotateCw,
+  WifiOff,
 } from 'lucide-react';
+import { offlineDB } from '@/lib/offline/db';
+import { syncManager } from '@/lib/offline/syncManager';
+import { OfflineSyncStatusBadge } from '@/components/pwa/OfflineSyncStatusBadge';
 
 export default function MobileVisitPage({ params }: { params: { hid: string } }) {
   const router = useRouter();
@@ -20,21 +28,58 @@ export default function MobileVisitPage({ params }: { params: { hid: string } })
   const [loading, setLoading] = useState(true);
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
   const [visitStatus, setVisitStatus] = useState<string>('VISITED');
+  const [notes, setNotes] = useState('');
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
 
-  React.useEffect(() => {
+  // Modals state
+  const [showNoteModal, setShowNoteModal] = useState(false);
+  const [showIssueModal, setShowIssueModal] = useState(false);
+  const [issueTitle, setIssueTitle] = useState('');
+  const [issueCategory, setIssueCategory] = useState('Voter Data');
+  const [issuePriority, setIssuePriority] = useState('MEDIUM');
+  const [issueDescription, setIssueDescription] = useState('');
+  const [issueSubmitting, setIssueSubmitting] = useState(false);
+
+  const [isOfflineMode, setIsOfflineMode] = useState(false);
+
+  useEffect(() => {
     async function loadHousehold() {
-      try {
-        const res = await fetch(`/api/v1/households/${params.hid}`);
-        const json = await res.json();
-        if (json.data) {
-          setHousehold(json.data);
-          if (json.data.members && json.data.members.length > 0) {
-            setSelectedMembers([json.data.members[0].id]);
+      // 1. Try online fetch
+      if (typeof navigator !== 'undefined' && navigator.onLine) {
+        try {
+          const res = await fetch(`/api/v1/households/${params.hid}`);
+          const json = await res.json();
+          if (json.data) {
+            setHousehold(json.data);
+            if (json.data.members && json.data.members.length > 0) {
+              setSelectedMembers(json.data.members.map((m: any) => m.id));
+            }
+            // Cache to IndexedDB for offline resilience
+            await offlineDB.saveHouseholds([json.data]);
+            setLoading(false);
+            return;
           }
+        } catch {
+          // Network failed, proceed to local IndexedDB fallback
         }
-      } catch (e) {
-        console.error('Failed to load household:', e);
+      }
+
+      // 2. Offline fallback to local IndexedDB
+      try {
+        const cached = await offlineDB.getHousehold(params.hid);
+        if (cached) {
+          setHousehold(cached);
+          setIsOfflineMode(true);
+          if (cached.members && cached.members.length > 0) {
+            setSelectedMembers(cached.members.map((m: any) => m.id));
+          }
+        } else {
+          setErrorMessage('Household not available offline. Please connect to download this sector.');
+        }
+      } catch (err: any) {
+        setErrorMessage(err.message || 'Failed to load household from offline storage');
       } finally {
         setLoading(false);
       }
@@ -45,7 +90,7 @@ export default function MobileVisitPage({ params }: { params: { hid: string } })
   const members = household?.members || [];
 
   const statuses = [
-    { id: 'VISITED', label: 'Visited' },
+    { id: 'VISITED', label: 'Visited & Contacted' },
     { id: 'NO_ONE_AVAILABLE', label: 'No One Available' },
     { id: 'FOLLOW_UP_REQUIRED', label: 'Follow-up Required' },
     { id: 'DECLINED_CONTACT', label: 'Do Not Contact / Declined' },
@@ -67,47 +112,221 @@ export default function MobileVisitPage({ params }: { params: { hid: string } })
     }
   };
 
+  const [isSavedLocally, setIsSavedLocally] = useState(false);
+
   const handleSave = async () => {
-    setSaved(true);
+    if (!household) return;
+    setSaving(true);
+    setErrorMessage('');
+
+    const noteContent = notes.trim()
+      ? notes.trim()
+      : `Door-to-door visit. ${selectedMembers.length} member(s) present.`;
+
+    // Check if offline
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      try {
+        await syncManager.queueFieldMutation({
+          campaignId: household.campaignId,
+          entityType: 'household',
+          entityId: household.id,
+          operation: 'UPDATE_STATUS_AND_VISIT',
+          baseVersion: household.version || 1,
+          payload: {
+            status: visitStatus === 'VISITED' ? 'Verified' : household.status,
+            visitStatus,
+            notes: noteContent,
+            voterId: selectedMembers[0] || null,
+          },
+        });
+
+        // Update local cached household view
+        household.status = visitStatus === 'VISITED' ? 'Verified' : household.status;
+        await offlineDB.saveHouseholds([household]);
+
+        setIsSavedLocally(true);
+        setSaved(true);
+        setTimeout(() => {
+          router.push('/agent');
+        }, 1200);
+      } catch (err: any) {
+        setErrorMessage(err.message || 'Failed to save offline visit');
+        setSaving(false);
+      }
+      return;
+    }
+
+    // Online execution with fallback to offline queue on network error
     try {
-      // Send standard sync mutation envelope (Docs 07)
-      await fetch('/api/v1/sync', {
+      // 1. Record field interaction
+      const res = await fetch(`/api/v1/households/${household.id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          mutations: [
-            {
-              mutationId: crypto.randomUUID(),
-              deviceId: 'device-agent-01',
-              userId: 'user-agent-01',
-              campaignId: 'camp-default',
-              entityType: 'household',
-              entityId: params.hid || 'h-101',
-              baseVersion: 1,
-              operation: 'UPDATE_VISIT_STATUS',
-              payload: {
-                visitStatus,
-                verificationStatus: 'VERIFIED',
-                interactionOutcome: visitStatus,
-                notes: `Mobile check-in. ${selectedMembers.length} member(s) present.`,
-              },
-              clientOccurredAt: new Date().toISOString(),
-              queuedAt: new Date().toISOString(),
-            },
-          ],
+          status: visitStatus,
+          notes: noteContent,
+          voterId: selectedMembers[0] || null,
         }),
       });
-    } catch (e) {
-      console.warn('Sync queued offline:', e);
+
+      if (!res.ok) {
+        throw new Error('Failed to record visit online');
+      }
+
+      // 2. If status was VISITED, update household operational status to Verified
+      if (visitStatus === 'VISITED') {
+        await fetch(`/api/v1/households/${household.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'Verified' }),
+        });
+      }
+
+      setSaved(true);
+      setTimeout(() => {
+        router.push('/agent');
+      }, 700);
+    } catch {
+      // Fallback: Queue mutation locally in IndexedDB
+      try {
+        await syncManager.queueFieldMutation({
+          campaignId: household.campaignId,
+          entityType: 'household',
+          entityId: household.id,
+          operation: 'UPDATE_STATUS_AND_VISIT',
+          baseVersion: household.version || 1,
+          payload: {
+            status: visitStatus === 'VISITED' ? 'Verified' : household.status,
+            visitStatus,
+            notes: noteContent,
+            voterId: selectedMembers[0] || null,
+          },
+        });
+
+        setIsSavedLocally(true);
+        setSaved(true);
+        setTimeout(() => {
+          router.push('/agent');
+        }, 1200);
+      } catch (err: any) {
+        setErrorMessage(err.message || 'Failed to queue offline visit');
+        setSaving(false);
+      }
     }
-    setTimeout(() => {
-      router.push('/agent');
-    }, 600);
   };
+
+  const handleCreateIssue = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!issueTitle.trim() || !issueDescription.trim()) return;
+
+    setIssueSubmitting(true);
+
+    // If offline, queue issue mutation
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      try {
+        await syncManager.queueFieldMutation({
+          campaignId: household.campaignId,
+          entityType: 'issue',
+          entityId: `temp_iss_${Date.now()}`,
+          operation: 'CREATE_ISSUE',
+          payload: {
+            campaignId: household.campaignId,
+            boothId: household.boothId,
+            householdId: household.id,
+            title: issueTitle.trim(),
+            category: issueCategory,
+            priority: issuePriority,
+            description: issueDescription.trim(),
+          },
+        });
+
+        setShowIssueModal(false);
+        setIssueTitle('');
+        setIssueDescription('');
+        alert('Issue queued locally (Pending Sync)!');
+      } catch (err: any) {
+        alert(err.message || 'Failed to queue issue offline');
+      } finally {
+        setIssueSubmitting(false);
+      }
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/v1/issues', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          campaignId: household.campaignId,
+          boothId: household.boothId,
+          householdId: household.id,
+          title: issueTitle.trim(),
+          category: issueCategory,
+          priority: issuePriority,
+          description: issueDescription.trim(),
+        }),
+      });
+
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error?.message || 'Failed to create issue');
+
+      setShowIssueModal(false);
+      setIssueTitle('');
+      setIssueDescription('');
+      alert('Issue reported successfully!');
+    } catch {
+      // Fallback to offline queue
+      try {
+        await syncManager.queueFieldMutation({
+          campaignId: household.campaignId,
+          entityType: 'issue',
+          entityId: `temp_iss_${Date.now()}`,
+          operation: 'CREATE_ISSUE',
+          payload: {
+            campaignId: household.campaignId,
+            boothId: household.boothId,
+            householdId: household.id,
+            title: issueTitle.trim(),
+            category: issueCategory,
+            priority: issuePriority,
+            description: issueDescription.trim(),
+          },
+        });
+        setShowIssueModal(false);
+        setIssueTitle('');
+        setIssueDescription('');
+        alert('Network interrupted. Issue queued locally (Pending Sync)!');
+      } catch (err: any) {
+        alert(err.message || 'Failed to report issue');
+      }
+    } finally {
+      setIssueSubmitting(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+        <RotateCw className="w-6 h-6 animate-spin text-blue-600" />
+      </div>
+    );
+  }
+
+  if (errorMessage && !household) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 text-center">
+        <AlertCircle className="w-10 h-10 text-rose-500 mb-2" />
+        <h2 className="text-base font-bold text-slate-800">Access Denied or Not Found</h2>
+        <p className="text-xs text-slate-500 mt-1 max-w-xs">{errorMessage}</p>
+        <Link href="/agent" className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-semibold">
+          Return to Dashboard
+        </Link>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 flex justify-center">
-      {/* Mobile Frame matching e69b1194-f2eb-4e85-9553-935a39c31df0.png */}
       <div className="w-full max-w-md bg-white min-h-screen flex flex-col border-x border-slate-200 relative pb-28 shadow-lg">
         
         {/* Top Header */}
@@ -120,18 +339,32 @@ export default function MobileVisitPage({ params }: { params: { hid: string } })
             <span className="text-blue-600">Campaign</span>Ops
           </div>
 
-          <button className="p-1 text-slate-500 hover:text-slate-700">
-            <MoreVertical className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            <OfflineSyncStatusBadge campaignId={household?.campaignId} />
+            <button
+              onClick={() => setShowIssueModal(true)}
+              className="p-1 text-slate-500 hover:text-slate-700 text-xs font-semibold flex items-center gap-1"
+            >
+              <AlertCircle className="w-4 h-4 text-amber-500" />
+              <span className="text-[10px]">Report</span>
+            </button>
+          </div>
         </header>
 
         {/* Content */}
         <main className="p-4 space-y-4 flex-1 overflow-y-auto">
+          {errorMessage && (
+            <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold rounded-xl flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0" />
+              <span>{errorMessage}</span>
+            </div>
+          )}
+
           {/* Title */}
           <div>
             <h1 className="text-xl font-black text-slate-900">Household {household?.code || params.hid}</h1>
             <p className="text-xs text-slate-500 font-medium">
-              {household?.booth?.ward?.name || 'Ward'} • {household?.booth?.name || 'Booth'}
+              {household?.booth?.ward?.name || 'Ward'} • Booth #{household?.booth?.boothNumber || '1'}
             </p>
           </div>
 
@@ -146,7 +379,7 @@ export default function MobileVisitPage({ params }: { params: { hid: string } })
                   {household?.primaryContactName ? `${household.primaryContactName} Family` : (household?.members?.[0]?.name ? `${household.members[0].name} Family` : 'Household')}
                 </h3>
                 <p className="text-[11px] text-slate-500 mt-1 leading-snug">
-                  {household?.address || 'Address unlisted'}
+                  {household?.address || `House #${household?.houseNumber || 'N/A'}`}
                 </p>
               </div>
             </div>
@@ -156,20 +389,22 @@ export default function MobileVisitPage({ params }: { params: { hid: string } })
                 <Home className="w-3 h-3" /> {household?.code || params.hid}
               </span>
               <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                household?.status === 'Verified' ? 'bg-emerald-100/70 text-emerald-800' : 'bg-amber-100/70 text-amber-800'
+                household?.status === 'Verified' || household?.status === 'Confirmed'
+                  ? 'bg-emerald-100/70 text-emerald-800'
+                  : 'bg-amber-100/70 text-amber-800'
               }`}>
                 <Check className="w-3 h-3" /> {household?.status || 'Pending'}
               </span>
               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-slate-200/70 text-slate-700 text-[10px] font-bold">
-                <Cpu className="w-3 h-3" /> AI Confidence: {household?.aiConfidence || 95}%
+                <Cpu className="w-3 h-3" /> AI Conf: {household?.aiConfidence || 90}%
               </span>
             </div>
           </div>
 
-          {/* Members (4) List */}
+          {/* Members List */}
           <div>
             <div className="flex items-center justify-between mb-2 px-1">
-              <h4 className="text-xs font-bold text-slate-900">Members (4)</h4>
+              <h4 className="text-xs font-bold text-slate-900">Members ({members.length})</h4>
               <button onClick={selectAll} className="text-xs font-bold text-blue-600 hover:underline">
                 {selectedMembers.length === members.length ? 'Deselect All' : 'Select All'}
               </button>
@@ -197,12 +432,15 @@ export default function MobileVisitPage({ params }: { params: { hid: string } })
                         {m.name.slice(0, 1)}
                       </div>
 
-                      <span className="text-xs font-bold text-slate-900">{m.name}</span>
+                      <div>
+                        <span className="text-xs font-bold text-slate-900 block leading-tight">{m.name}</span>
+                        <span className="text-[10px] text-slate-400 font-mono">EPIC: {m.epicNumber}</span>
+                      </div>
                     </div>
 
                     <div className="flex items-center gap-2 text-xs text-slate-500 font-mono">
-                      <span>{m.age}</span>
-                      <span>|</span>
+                      <span>{m.age}y</span>
+                      <span>•</span>
                       <span>{m.gender}</span>
                     </div>
                   </div>
@@ -211,7 +449,7 @@ export default function MobileVisitPage({ params }: { params: { hid: string } })
             </div>
           </div>
 
-          {/* Visit Status Radios directly matching e69b1194...png */}
+          {/* Visit Status Radios */}
           <div>
             <h4 className="text-xs font-bold text-slate-900 mb-2 px-1">Visit Status</h4>
             <div className="space-y-2">
@@ -244,30 +482,205 @@ export default function MobileVisitPage({ params }: { params: { hid: string } })
               })}
             </div>
           </div>
+
+          {/* Visit Note Preview / Field */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5 px-1">
+              <h4 className="text-xs font-bold text-slate-900">Visit Notes</h4>
+              <button
+                type="button"
+                onClick={() => setShowNoteModal(true)}
+                className="text-xs font-bold text-blue-600 hover:underline"
+              >
+                {notes ? 'Edit Note' : '+ Add Note'}
+              </button>
+            </div>
+            {notes ? (
+              <div className="p-3 bg-blue-50/50 border border-blue-100 rounded-xl text-xs text-slate-700">
+                {notes}
+              </div>
+            ) : (
+              <p className="text-[11px] text-slate-400 italic px-1">No note attached yet.</p>
+            )}
+          </div>
+
+          {/* Previous Visits / History */}
+          {household?.interactions && household.interactions.length > 0 && (
+            <div>
+              <h4 className="text-xs font-bold text-slate-900 mb-2 px-1">Previous Visit History</h4>
+              <div className="space-y-2">
+                {household.interactions.map((int: any) => (
+                  <div key={int.id} className="p-3 rounded-xl border border-slate-100 bg-slate-50 text-xs">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="font-bold text-slate-800">{int.status}</span>
+                      <span className="text-[10px] text-slate-400">
+                        {new Date(int.occurredAt).toLocaleDateString()}
+                      </span>
+                    </div>
+                    {int.notes && <p className="text-[11px] text-slate-600">{int.notes}</p>}
+                    <span className="text-[10px] text-slate-400 mt-1 block">
+                      Agent: {int.agent?.displayName || 'Field Worker'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
         </main>
 
-        {/* Fixed Bottom Action Buttons directly matching e69b1194...png */}
+        {/* Fixed Bottom Action Buttons */}
         <div className="fixed bottom-0 max-w-md w-full bg-white border-t border-slate-200 p-4 grid grid-cols-2 gap-3 z-30 shadow-lg">
           <button
             type="button"
+            onClick={() => setShowNoteModal(true)}
             className="py-3 px-4 border border-blue-600 text-blue-600 hover:bg-blue-50 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition"
           >
             <FileText className="w-4 h-4" />
-            Add Note
+            {notes ? 'Edit Note' : 'Add Note'}
           </button>
 
           <button
             type="button"
             onClick={handleSave}
-            disabled={saved}
+            disabled={saving || saved}
             className="py-3 px-4 bg-blue-600 hover:bg-blue-700 active:scale-[0.99] text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition shadow-md shadow-blue-500/25 disabled:opacity-75"
           >
-            <Save className="w-4 h-4" />
-            <span>{saved ? 'Saved ✓' : 'Save'}</span>
+            {saving ? (
+              <RotateCw className="w-4 h-4 animate-spin" />
+            ) : (
+              <Save className="w-4 h-4" />
+            )}
+            <span>
+              {saved
+                ? isSavedLocally
+                  ? 'Saved on device (Pending Sync)'
+                  : 'Saved ✓'
+                : saving
+                ? 'Saving...'
+                : 'Save Visit'}
+            </span>
           </button>
         </div>
+
+        {/* Note Dialog Modal */}
+        {showNoteModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+            <div className="bg-white rounded-2xl p-5 w-full max-w-sm border border-slate-200 shadow-xl space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="font-bold text-sm text-slate-900">Add Field Visit Note</h3>
+                <button onClick={() => setShowNoteModal(false)} className="text-slate-400 hover:text-slate-600">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <textarea
+                rows={4}
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Enter details of your visit with this family..."
+                className="w-full p-2.5 border border-slate-200 rounded-xl text-xs bg-slate-50 focus:bg-white"
+              />
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowNoteModal(false)}
+                  className="px-3 py-1.5 border border-slate-200 text-slate-600 rounded-lg text-xs font-semibold"
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Issue Report Modal */}
+        {showIssueModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+            <div className="bg-white rounded-2xl p-5 w-full max-w-sm border border-slate-200 shadow-xl space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="font-bold text-sm text-slate-900">Report Operational Issue</h3>
+                <button onClick={() => setShowIssueModal(false)} className="text-slate-400 hover:text-slate-600">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <form onSubmit={handleCreateIssue} className="space-y-3 text-xs">
+                <div>
+                  <label className="block font-bold text-slate-700 text-[10px] uppercase mb-1">Issue Title</label>
+                  <input
+                    type="text"
+                    required
+                    value={issueTitle}
+                    onChange={(e) => setIssueTitle(e.target.value)}
+                    placeholder="e.g. Discrepancy in Voter Age or Address"
+                    className="w-full p-2 border border-slate-200 rounded-lg bg-slate-50"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block font-bold text-slate-700 text-[10px] uppercase mb-1">Category</label>
+                    <select
+                      value={issueCategory}
+                      onChange={(e) => setIssueCategory(e.target.value)}
+                      className="w-full p-2 border border-slate-200 rounded-lg bg-slate-50"
+                    >
+                      <option>Voter Data</option>
+                      <option>Household Data</option>
+                      <option>Follow-up</option>
+                      <option>Logistics</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 text-[10px] uppercase mb-1">Priority</label>
+                    <select
+                      value={issuePriority}
+                      onChange={(e) => setIssuePriority(e.target.value)}
+                      className="w-full p-2 border border-slate-200 rounded-lg bg-slate-50"
+                    >
+                      <option value="LOW">Low</option>
+                      <option value="MEDIUM">Medium</option>
+                      <option value="HIGH">High</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 text-[10px] uppercase mb-1">Description</label>
+                  <textarea
+                    rows={3}
+                    required
+                    value={issueDescription}
+                    onChange={(e) => setIssueDescription(e.target.value)}
+                    placeholder="Describe the discrepancy or follow-up needed..."
+                    className="w-full p-2 border border-slate-200 rounded-lg bg-slate-50"
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setShowIssueModal(false)}
+                    className="px-3 py-1.5 border border-slate-200 text-slate-600 rounded-lg font-semibold"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={issueSubmitting}
+                    className="px-4 py-1.5 bg-blue-600 text-white rounded-lg font-bold shadow-sm disabled:opacity-50"
+                  >
+                    {issueSubmitting ? 'Submitting...' : 'Report Issue'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
 
       </div>
     </div>
   );
 }
+

@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -36,6 +36,9 @@ model User {
   role               String               @default("POLITICAL_AGENT") // SUPER_ADMIN, CAMPAIGN_ADMIN, BOOTH_MANAGER, POLITICAL_AGENT
   status             String               @default("ACTIVE")
   avatarUrl          String?
+  passwordHash       String?
+  failedLoginCount   Int                  @default(0)
+  lockedUntil        DateTime?
   mfaEnabled         Boolean              @default(false)
   lastLoginAt        DateTime?
   createdAt          DateTime             @default(now())
@@ -49,6 +52,23 @@ model User {
   assignedIssues     Issue[]              @relation("AssignedIssue")
   visIssued          VisEvent[]
   devices            UserDevice[]
+  sessions           Session[]
+}
+
+model Session {
+  id           String    @id @default(uuid())
+  userId       String
+  tokenHash    String    @unique
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  ipAddress    String?
+  userAgent    String?
+  lastSeenAt   DateTime  @default(now())
+  createdAt    DateTime  @default(now())
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tokenHash])
+  @@index([userId])
 }
 
 model UserDevice {
@@ -164,9 +184,19 @@ model Campaign {
   partyName        String?              // Kept for backward compatibility
   candidatePhoto   String?
   description      String?
-  status           String               @default("ACTIVE")
+  status           String               @default("DRAFT") // DRAFT, SETUP, READY, ACTIVE, ARCHIVED
   targetVoters     Int                  @default(0)
   targetCoverage   Int                  @default(80)
+  estimatedVoters  Int                  @default(0)
+  targetVotes      Int                  @default(0)
+  safeMarginVotes  Int                  @default(0)
+  constituencyName String?
+  stateName        String?
+  districtName     String?
+  declaredWards    Int                  @default(0)
+  declaredBooths   Int                  @default(0)
+  declaredVillages Int                  @default(0)
+  candidateCount   Int                  @default(1)
   createdAt        DateTime             @default(now())
   updatedAt        DateTime             @updatedAt
   organization     Organization         @relation(fields: [organizationId], references: [id])
@@ -203,6 +233,7 @@ model Ward {
   constituencyId  String?
   wardNumber      Int
   name            String
+  localityType    String?       @default("WARD") // WARD, VILLAGE, MUNICIPAL_ZONE, LOCALITY
   boundaryVersion Int           @default(1)
   createdAt       DateTime      @default(now())
   campaign        Campaign      @relation(fields: [campaignId], references: [id])
@@ -241,20 +272,57 @@ model Booth {
 // -------------------------------------------------------------
 
 model ElectoralRollImport {
-  id                  String       @id @default(uuid())
+  id                  String         @id @default(uuid())
   campaignId          String
+  wardId              String?
+  boothId             String?
   originalFilename    String
   fileSize            String
-  status              String       @default("Pending") // Upload, FileValidation, OcrTextExtraction, StructuredExtraction, LowConfidenceReview, DuplicateReview, HouseholdSuggestion, Reconciliation, Completed, Failed
-  totalExtracted      Int          @default(0)
-  totalHouseholds     Int          @default(0)
-  confidenceAvg       Float        @default(0.95)
-  lowConfidenceCount  Int          @default(0)
-  duplicateCount      Int          @default(0)
-  uploadedAt          DateTime     @default(now())
+  filePath            String?
+  fileSha256          String?
+  status              String         @default("Pending") // Upload, FileValidation, OcrTextExtraction, StructuredExtraction, LowConfidenceReview, DuplicateReview, HouseholdSuggestion, Reconciliation, Completed, Failed
+  totalExtracted      Int            @default(0)
+  totalHouseholds     Int            @default(0)
+  confidenceAvg       Float          @default(0.95)
+  lowConfidenceCount  Int            @default(0)
+  duplicateCount      Int            @default(0)
+  uploadedAt          DateTime       @default(now())
   completedAt         DateTime?
-  campaign            Campaign     @relation(fields: [campaignId], references: [id])
+  campaign            Campaign       @relation(fields: [campaignId], references: [id])
   pages               ImportPage[]
+  records             ImportRecord[]
+}
+
+model ImportRecord {
+  id                String              @id @default(uuid())
+  importId          String
+  campaignId        String
+  wardId            String?
+  boothId           String?
+  serialNumber      Int
+  epicNumber        String
+  fullName          String
+  relationName      String?
+  relationType      String?             // FATHER, HUSBAND, MOTHER, OTHER
+  houseNumber       String
+  age               Int
+  gender            String              // M, F, O
+  status            String              @default("VALID") // VALID, LOW_CONFIDENCE, DUPLICATE_SUSPECT, INVALID, PUBLISHED
+  confidence        Float               @default(0.95)
+  fieldConfidences  String?             // JSON object of per-field confidence
+  sourceSnippet     String?
+  sourcePage        Int?
+  duplicateOfEpic   String?
+  validationErrors  String?             // JSON array of validation errors
+  reviewed          Boolean             @default(false)
+  corrected         Boolean             @default(false)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  importJob         ElectoralRollImport @relation(fields: [importId], references: [id], onDelete: Cascade)
+
+  @@index([importId])
+  @@index([epicNumber])
+  @@index([campaignId])
 }
 
 model ImportPage {
@@ -264,7 +332,7 @@ model ImportPage {
   ocrStatus      String              @default("Completed")
   confidence     Float               @default(0.95)
   rawText        String?
-  importJob      ElectoralRollImport @relation(fields: [importId], references: [id])
+  importJob      ElectoralRollImport @relation(fields: [importId], references: [id], onDelete: Cascade)
 }
 
 // -------------------------------------------------------------
@@ -281,8 +349,9 @@ model Household {
   primaryContactName String?
   primaryContactId   String?
   aiConfidence       Int               @default(90) // percentage
-  status             String            @default("Verified") // Verified, Pending
+  status             String            @default("Verified") // Verified, Pending, Suggested, NeedsReview
   evidenceSignals    String            @default("[]") // JSON: ["EXACT_HOUSE_NO", "SAME_NORMALIZED_ADDRESS", "GUARDIAN_MATCH"]
+  isManuallyCorrected Boolean          @default(false)
   version            Int               @default(1)    // Optimistic locking
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
@@ -312,6 +381,8 @@ model Voter {
   epicNumber         String                 @unique
   houseNumber        String
   roleInHousehold    String?                // Head, Spouse, Son, Daughter, etc.
+  householdSource    String?                @default("SUGGESTED") // SUGGESTED, CONFIRMED, MANUAL_CORRECTION
+  householdConfidence Float?                @default(0.9)
   phone              String?
   photoUrl           String?
   status             String                 @default("Processed") // Processed, Pending, Anomaly

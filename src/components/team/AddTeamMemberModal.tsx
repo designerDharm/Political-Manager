@@ -37,11 +37,13 @@ export function AddTeamMemberModal({ campaignId }: { campaignId: string }) {
           phone,
           role,
           password: password || 'Password@123',
+          campaignId,
         }),
       });
 
       const json = await res.json();
       if (!res.ok) throw new Error(json.error?.message || json.message || 'Failed to add member');
+
 
       setSuccess('Team member added successfully!');
       setTimeout(() => {

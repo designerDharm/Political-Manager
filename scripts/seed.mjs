@@ -3,6 +3,11 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 async function main() {
+  if (process.env.NODE_ENV === 'production' && !process.env.ALLOW_PRODUCTION_SEED) {
+    console.error('CRITICAL: Seed script execution aborted in production environment.');
+    process.exit(1);
+  }
+
   console.log('--- Cleaning database for V2 Schema ---');
   await prisma.approvalRequest.deleteMany({});
   await prisma.securityIncident.deleteMany({});

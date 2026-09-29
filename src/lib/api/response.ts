@@ -1,12 +1,14 @@
 import { NextResponse } from 'next/server';
 
 export interface ApiSuccessResponse<T> {
+  success: true;
   data: T;
   meta?: Record<string, unknown>;
   requestId: string;
 }
 
 export interface ApiErrorResponse {
+  success: false;
   error: {
     code: string;
     message: string;
@@ -19,6 +21,7 @@ export function apiSuccess<T>(data: T, meta?: Record<string, unknown>, status = 
   const requestId = crypto.randomUUID();
   return NextResponse.json<ApiSuccessResponse<T>>(
     {
+      success: true,
       data,
       meta: {
         timestamp: new Date().toISOString(),
@@ -34,6 +37,7 @@ export function apiError(code: string, message: string, status = 400, details?: 
   const requestId = crypto.randomUUID();
   return NextResponse.json<ApiErrorResponse>(
     {
+      success: false,
       error: {
         code,
         message,

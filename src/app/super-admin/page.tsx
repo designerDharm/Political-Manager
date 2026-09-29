@@ -27,63 +27,85 @@ export default async function SuperAdminDashboard() {
   let userCount = 0;
   let importCount = 0;
 
+  let activeCampaignsCount = 0;
+  let completedCampaignsCount = 0;
+  let scheduledCampaignsCount = 0;
+  let monthlyActiveCampaigns: number[] = new Array(12).fill(0);
+  let recentAuditEvents: any[] = [];
+
   try {
-    const counts = await Promise.all([
-      prisma.organization.count(),
-      prisma.campaign.count(),
-      prisma.user.count(),
-      prisma.electoralRollImport.count(),
+    const [counts, auditEvents, allCampaigns] = await Promise.all([
+      Promise.all([
+        prisma.organization.count(),
+        prisma.campaign.count(),
+        prisma.user.count(),
+        prisma.electoralRollImport.count(),
+      ]),
+      prisma.auditEvent.findMany({
+        take: 5,
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.campaign.findMany({
+        select: { status: true, createdAt: true },
+      }),
     ]);
     orgCount = counts[0];
     campaignCount = counts[1];
     userCount = counts[2];
     importCount = counts[3];
+    recentAuditEvents = auditEvents;
+
+    allCampaigns.forEach((c) => {
+      if (c.status === 'ACTIVE') activeCampaignsCount++;
+      else if (c.status === 'COMPLETED' || c.status === 'CLOSED') completedCampaignsCount++;
+      else scheduledCampaignsCount++;
+
+      const month = new Date(c.createdAt).getMonth();
+      if (month >= 0 && month < 12) {
+        monthlyActiveCampaigns[month] += 1;
+      }
+    });
   } catch (err) {
     console.error('Database connection error in SuperAdminDashboard:', err);
   }
 
-  const recentActivities = [
-    {
-      id: 1,
-      icon: Megaphone,
-      iconBg: 'bg-rose-50 text-rose-600',
-      title: 'New campaign created - Sharma for Assembly',
-      desc: 'Campaign setup completed successfully',
-      time: '5 min ago',
-    },
-    {
-      id: 2,
-      icon: Database,
-      iconBg: 'bg-emerald-50 text-emerald-600',
-      title: 'Voter data processed - Ward 12',
-      desc: '2,640 voters processed & normalized',
-      time: '18 min ago',
-    },
-    {
-      id: 3,
-      icon: Users,
-      iconBg: 'bg-blue-50 text-blue-600',
-      title: 'New users added - Team Rajasthan',
-      desc: '12 users invited and activated',
-      time: '1 hour ago',
-    },
-    {
-      id: 4,
-      icon: CheckCircle2,
-      iconBg: 'bg-emerald-50 text-emerald-600',
-      title: 'Backup completed successfully',
-      desc: 'Daily system backup finished (snapshot encrypted)',
-      time: '2 hours ago',
-    },
-    {
-      id: 5,
-      icon: Cpu,
-      iconBg: 'bg-purple-50 text-purple-600',
-      title: 'AI processing completed - 2,64,000 voters',
-      desc: 'Voter analysis and household suggestions completed',
-      time: '3 hours ago',
-    },
-  ];
+  const recentActivities = recentAuditEvents.length > 0
+    ? recentAuditEvents.map((evt, idx) => {
+        let icon = Megaphone;
+        let iconBg = 'bg-blue-50 text-blue-600';
+        if (evt.action.includes('ELECTORAL') || evt.action.includes('IMPORT')) {
+          icon = Database;
+          iconBg = 'bg-emerald-50 text-emerald-600';
+        } else if (evt.action.includes('USER') || evt.action.includes('LOGIN')) {
+          icon = Users;
+          iconBg = 'bg-purple-50 text-purple-600';
+        } else if (evt.action.includes('TURNOUT') || evt.action.includes('VIS')) {
+          icon = Cpu;
+          iconBg = 'bg-amber-50 text-amber-600';
+        }
+
+        const date = new Date(evt.createdAt);
+        const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+        return {
+          id: evt.id || idx,
+          icon,
+          iconBg,
+          title: `${evt.action.replace(/_/g, ' ')}`,
+          desc: `Audit Resource: ${evt.resource}`,
+          time: timeStr,
+        };
+      })
+    : [
+        {
+          id: 1,
+          icon: ShieldCheck,
+          iconBg: 'bg-emerald-50 text-emerald-600',
+          title: 'System Initialized',
+          desc: 'PostgreSQL Single Source of Truth operational',
+          time: 'Active',
+        },
+      ];
 
   return (
     <div className="flex min-h-screen bg-slate-50">
@@ -179,20 +201,20 @@ export default async function SuperAdminDashboard() {
                 <div className="flex items-center gap-4 text-xs">
                   <div className="flex items-center gap-1.5">
                     <span className="w-2.5 h-2.5 rounded-full bg-blue-600" />
-                    <span className="text-slate-600">Active Campaigns</span>
+                    <span className="text-slate-600 font-medium">Active ({activeCampaignsCount})</span>
                   </div>
                   <div className="flex items-center gap-1.5">
                     <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                    <span className="text-slate-600">Completed</span>
+                    <span className="text-slate-600 font-medium">Completed ({completedCampaignsCount})</span>
                   </div>
                   <div className="flex items-center gap-1.5">
                     <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />
-                    <span className="text-slate-600">Scheduled</span>
+                    <span className="text-slate-600 font-medium">Setup/Scheduled ({scheduledCampaignsCount})</span>
                   </div>
 
-                  <select className="border border-slate-200 rounded-lg px-2.5 py-1 text-slate-600 bg-slate-50 text-xs focus:outline-none">
-                    <option>Jan 2024 - Dec 2024</option>
-                  </select>
+                  <span className="text-slate-400 text-xs">
+                    {new Date().getFullYear()} Active SSoT
+                  </span>
                 </div>
               </div>
 

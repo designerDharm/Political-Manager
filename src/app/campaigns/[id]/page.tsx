@@ -3,6 +3,7 @@ import { Sidebar } from '@/components/layout/Sidebar';
 import { TopHeader } from '@/components/layout/TopHeader';
 import { StatCard } from '@/components/ui/StatCard';
 import { prisma } from '@/lib/prisma';
+import { getCampaignOperationalMetrics } from '@/lib/analytics/metrics';
 import Link from 'next/link';
 import {
   Users,
@@ -14,8 +15,8 @@ import {
   FileSpreadsheet,
   CalendarCheck,
   Settings,
-  ChevronRight,
   TrendingUp,
+  Target
 } from 'lucide-react';
 
 export const revalidate = 0;
@@ -25,11 +26,8 @@ export default async function CampaignAdminDashboard({
 }: {
   params: { id: string };
 }) {
-  const [voterCount, householdCount, visitedHouseholdCount, issueCount, campaign] = await Promise.all([
-    prisma.voter.count({ where: { campaignId: params.id } }),
-    prisma.household.count({ where: { campaignId: params.id } }),
-    prisma.household.count({ where: { campaignId: params.id, status: 'Verified' } }),
-    prisma.issue.count({ where: { campaignId: params.id } }),
+  const [metrics, campaign] = await Promise.all([
+    getCampaignOperationalMetrics(params.id),
     prisma.campaign.findUnique({
       where: { id: params.id },
       include: {
@@ -39,9 +37,20 @@ export default async function CampaignAdminDashboard({
     }),
   ]);
 
-  const targetHouseholds = campaign?.targetVoters ? Math.round(campaign.targetVoters / 3) : householdCount;
-  const progressPercent = targetHouseholds > 0 ? Math.round((visitedHouseholdCount / targetHouseholds) * 100) : 0;
-  const pendingVisits = Math.max(0, householdCount - visitedHouseholdCount);
+  const totalVoters = metrics.voters.total;
+  const totalHouseholds = metrics.households.total;
+  const visitedHouseholds = metrics.households.visited;
+  const pendingVisits = metrics.households.pending;
+  const openIssues = metrics.issues.open;
+  const coveragePercent = metrics.households.coveragePercentage;
+
+  // Distinguish Configured Planning Targets vs Observed Operational Data
+  const targetVotersPlanning = campaign?.targetVoters || null;
+  const targetHouseholdsPlanning = targetVotersPlanning ? Math.round(targetVotersPlanning / 3) : totalHouseholds;
+  const planningProgressPercent =
+    targetHouseholdsPlanning > 0
+      ? Math.min(100, Math.round((visitedHouseholds / targetHouseholdsPlanning) * 100))
+      : coveragePercent;
 
   return (
     <div className="flex min-h-screen bg-slate-50">
@@ -52,6 +61,7 @@ export default async function CampaignAdminDashboard({
           roleBadgeText="Campaign Admin"
           userName="Rajesh Sharma"
           userRoleTitle="Campaign Admin"
+          currentCampaignId={params.id}
         />
 
         <main className="flex-1 p-8 overflow-y-auto">
@@ -72,6 +82,13 @@ export default async function CampaignAdminDashboard({
 
             <div className="flex items-center gap-3">
               <Link
+                href={`/campaigns/${params.id}/reports`}
+                className="py-2 px-3.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-semibold shadow-sm transition flex items-center gap-1.5"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-blue-600" />
+                <span>Export Reports</span>
+              </Link>
+              <Link
                 href={`/campaigns/${params.id}/voters/upload`}
                 className="py-2 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-md shadow-blue-500/20 transition flex items-center gap-2"
               >
@@ -86,64 +103,81 @@ export default async function CampaignAdminDashboard({
             </div>
           </div>
 
-          {/* Campaign Progress Gauge directly matching mobile and desktop specs */}
+          {/* Campaign Household Progress */}
           <div className="bg-white rounded-xl border border-slate-200 p-6 mb-8 shadow-card">
             <div className="flex items-center justify-between mb-3">
               <div>
-                <h3 className="text-base font-bold text-slate-900">Campaign Household Progress</h3>
-                <p className="text-xs text-slate-500">
-                  {progressPercent}% Households Completed ({visitedHouseholdCount.toLocaleString()} of {targetHouseholds.toLocaleString()} target)
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base font-bold text-slate-900">Observed Household Coverage</h3>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-semibold">
+                    PostgreSQL SSoT
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  {coveragePercent}% of mapped households visited ({visitedHouseholds.toLocaleString()} of {totalHouseholds.toLocaleString()} mapped residences)
                 </p>
               </div>
-              <span className="text-2xl font-black text-blue-600">{progressPercent}%</span>
+              <span className="text-2xl font-black text-blue-600">{coveragePercent}%</span>
             </div>
             <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden">
               <div
                 className="bg-gradient-to-r from-blue-600 to-emerald-500 h-3 rounded-full transition-all duration-500"
-                style={{ width: `${progressPercent}%` }}
+                style={{ width: `${coveragePercent}%` }}
               />
             </div>
+
+            {targetVotersPlanning && (
+              <div className="mt-4 pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between text-xs text-slate-500">
+                <span className="flex items-center gap-1.5 font-medium">
+                  <Target className="w-3.5 h-3.5 text-blue-600" />
+                  Configured Planning Target: {targetVotersPlanning.toLocaleString()} Voters (~{targetHouseholdsPlanning.toLocaleString()} households)
+                </span>
+                <span className="font-semibold text-slate-700">
+                  Target Fulfillment: {planningProgressPercent}%
+                </span>
+              </div>
+            )}
           </div>
 
           {/* 4 Stat Cards directly sourced from DB */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
             <StatCard
               title="Total Registered Voters"
-              value={voterCount.toLocaleString()}
-              subtitle="Imported & normalized"
+              value={totalVoters.toLocaleString()}
+              subtitle="Imported & published electors"
               icon={Users}
               iconColor="text-blue-600"
               iconBgColor="bg-blue-50"
             />
             <StatCard
               title="Households Visited"
-              value={visitedHouseholdCount.toLocaleString()}
-              subtitle={`${progressPercent}% of target households`}
+              value={visitedHouseholds.toLocaleString()}
+              subtitle={`${coveragePercent}% of total residences`}
               icon={CheckCircle}
               iconColor="text-emerald-600"
               iconBgColor="bg-emerald-50"
-              badge={{ text: visitedHouseholdCount > 0 ? 'On Track' : 'Not Started', type: visitedHouseholdCount > 0 ? 'success' : 'info' }}
+              badge={{ text: visitedHouseholds > 0 ? 'Active' : 'Not Started', type: visitedHouseholds > 0 ? 'success' : 'info' }}
             />
             <StatCard
-              title="Pending Visits"
+              title="Pending Door Visits"
               value={pendingVisits.toLocaleString()}
-              subtitle="Remaining in field queue"
+              subtitle="Awaiting agent follow-up"
               icon={Clock}
               iconColor="text-amber-600"
               iconBgColor="bg-amber-50"
             />
             <StatCard
-              title="Field Issues Reported"
-              value={issueCount.toLocaleString()}
-              subtitle="Grievances & data corrections"
+              title="Open Field Grievances"
+              value={openIssues.toLocaleString()}
+              subtitle="Civic & infrastructure issues"
               icon={AlertTriangle}
               iconColor="text-rose-600"
               iconBgColor="bg-rose-50"
-              badge={{ text: issueCount > 0 ? 'Action Req' : 'Zero Issues', type: issueCount > 0 ? 'danger' : 'success' }}
+              badge={{ text: openIssues > 0 ? 'Action Req' : 'Zero Issues', type: openIssues > 0 ? 'danger' : 'success' }}
             />
           </div>
 
-          {/* Quick Actions Grid */}
+          {/* Quick Operations Grid */}
           <div className="mb-8">
             <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider mb-4">Quick Operations</h3>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
@@ -152,7 +186,7 @@ export default async function CampaignAdminDashboard({
                 { label: 'Coverage Map', href: `/campaigns/${params.id}/map`, icon: MapPin, color: 'text-rose-600 bg-rose-50' },
                 { label: 'Team', href: `/campaigns/${params.id}/team`, icon: UsersRound, color: 'text-emerald-600 bg-emerald-50' },
                 { label: 'Analytics', href: `/campaigns/${params.id}/analytics`, icon: TrendingUp, color: 'text-purple-600 bg-purple-50' },
-                { label: 'Election Day', href: `/campaigns/${params.id}/election-day`, icon: CalendarCheck, color: 'text-amber-600 bg-amber-50' },
+                { label: 'Reports', href: `/campaigns/${params.id}/reports`, icon: FileSpreadsheet, color: 'text-amber-600 bg-amber-50' },
                 { label: 'Settings', href: `/campaigns/${params.id}/settings`, icon: Settings, color: 'text-slate-600 bg-slate-100' },
               ].map((item) => {
                 const ItemIcon = item.icon;

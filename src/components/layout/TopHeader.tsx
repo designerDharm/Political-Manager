@@ -14,15 +14,50 @@ export function TopHeader({
   roleBadgeText = 'Super Admin',
   userName = 'Rajesh Sharma',
   userRoleTitle = 'System Owner',
-}: TopHeaderProps) {
+  currentCampaignId,
+}: TopHeaderProps & { currentCampaignId?: string }) {
+  const [campaigns, setCampaigns] = React.useState<any[]>([]);
+
+  React.useEffect(() => {
+    async function loadCampaigns() {
+      try {
+        const res = await fetch('/api/v1/campaigns');
+        const json = await res.json();
+        if (json.data && Array.isArray(json.data)) {
+          setCampaigns(json.data);
+        }
+      } catch (e) {
+        // silent fallback
+      }
+    }
+    loadCampaigns();
+  }, []);
+
   return (
     <header className="h-16 bg-white border-b border-slate-200 px-8 flex items-center justify-between sticky top-0 z-20">
-      {/* Role Pill */}
+      {/* Role Pill & Campaign Switcher */}
       <div className="flex items-center gap-4">
         <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-semibold border border-blue-200">
           <Shield className="w-3.5 h-3.5 text-blue-600" />
           {roleBadgeText}
         </span>
+
+        {campaigns.length > 0 && currentCampaignId && (
+          <select
+            value={currentCampaignId}
+            onChange={(e) => {
+              window.location.href = `/campaigns/${e.target.value}`;
+            }}
+            aria-label="Switch Campaign Instance"
+            className="px-2.5 py-1 text-xs bg-slate-50 border border-slate-200 rounded-lg text-slate-800 font-semibold focus:outline-none hover:bg-slate-100 transition max-w-[220px] truncate"
+          >
+            {campaigns.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        )}
       </div>
 
       {/* Search Input Bar (Center/Right aligned) */}

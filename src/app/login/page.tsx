@@ -11,24 +11,50 @@ export default function LoginPage() {
   const [password, setPassword] = useState('password123');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMessage(null);
     setLoading(true);
 
-    setTimeout(() => {
-      if (email.includes('admin') || email.includes('super')) {
-        router.push('/super-admin');
-      } else if (email.includes('agent') || email.includes('rakesh')) {
-        router.push('/agent');
-      } else {
-        router.push('/campaigns/sharma-assembly-2026');
+    try {
+      const res = await fetch('/api/v1/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        setErrorMessage(data.message || 'Invalid email or password');
+        setLoading(false);
+        return;
       }
-    }, 400);
+
+      const user = data.data?.user;
+      const role = user?.role;
+      const defaultCampaignId = user?.defaultCampaignId;
+
+      if (role === 'SUPER_ADMIN') {
+        router.push('/super-admin');
+      } else if (role === 'POLITICAL_AGENT') {
+        router.push('/agent');
+      } else if (defaultCampaignId) {
+        router.push(`/campaigns/${defaultCampaignId}`);
+      } else {
+        router.push('/campaigns/new');
+      }
+    } catch (err) {
+      setErrorMessage('Connection failed. Please check your network and try again.');
+      setLoading(false);
+    }
   };
 
   const selectRoleDemo = (roleEmail: string) => {
     setEmail(roleEmail);
+    setErrorMessage(null);
   };
 
   return (
@@ -83,12 +109,19 @@ export default function LoginPage() {
           </div>
 
           {/* Official Login Credentials Notice */}
-          <div className="mb-6 p-3 bg-blue-50/70 rounded-xl border border-blue-200 text-xs">
-            <span className="font-bold text-blue-950 block">Super Admin Access</span>
+          <div className="mb-4 p-3 bg-blue-50/70 rounded-xl border border-blue-200 text-xs">
+            <span className="font-bold text-blue-950 block">Authorized Access</span>
             <p className="text-[11px] text-blue-800 mt-0.5">
-              Enter your authorized credentials below to access the Super Admin control panel.
+              Enter your registered campaign email and password to securely sign in.
             </p>
           </div>
+
+          {errorMessage && (
+            <div className="mb-4 p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs font-semibold flex items-center gap-2 animate-in fade-in">
+              <span className="w-1.5 h-1.5 rounded-full bg-rose-600 inline-block" />
+              <span>{errorMessage}</span>
+            </div>
+          )}
 
           <form onSubmit={handleLogin} className="space-y-4">
             <div>

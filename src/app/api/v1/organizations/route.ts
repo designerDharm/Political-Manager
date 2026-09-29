@@ -18,8 +18,13 @@ export async function GET(req: NextRequest) {
   }
 }
 
+import { requirePlatformRole } from '@/lib/auth';
+
 export async function POST(req: NextRequest) {
   try {
+    const authResult = await requirePlatformRole(req, ['SUPER_ADMIN']);
+    if ('error' in authResult) return authResult.error;
+
     const body = await req.json();
     const { name, slug } = body;
 

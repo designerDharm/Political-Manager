@@ -1,9 +1,13 @@
 import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { apiSuccess, apiError } from '@/lib/api/response';
+import { requirePlatformRole } from '@/lib/auth';
 
 export async function GET(req: NextRequest) {
   try {
+    const authResult = await requirePlatformRole(req, ['SUPER_ADMIN']);
+    if ('error' in authResult) return authResult.error;
+
     const settingRecord = await prisma.auditEvent.findFirst({
       where: { action: 'UPDATE_GLOBAL_SETTINGS' },
       orderBy: { createdAt: 'desc' },
@@ -34,6 +38,9 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const authResult = await requirePlatformRole(req, ['SUPER_ADMIN']);
+    if ('error' in authResult) return authResult.error;
+
     const body = await req.json();
     const { apiBaseEndpoint, maxUploadSize, auditRetention, strictNonInference, breakGlassDualControl } = body;
 

@@ -22,8 +22,8 @@ export async function GET() {
       {
         status: 'unhealthy',
         timestamp: new Date().toISOString(),
-        database: 'error',
-        error: String(error),
+        database: 'disconnected',
+        error: 'Database connection failed',
       },
       { status: 500 }
     );

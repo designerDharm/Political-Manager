@@ -17,6 +17,8 @@ const PROHIBITED_KEYWORDS = [
   'undecided voter',
 ];
 
+import { requireAuth } from '@/lib/auth';
+
 interface GovernedQuerySpec {
   intent: string;
   scope: string;
@@ -26,8 +28,19 @@ interface GovernedQuerySpec {
 
 export async function POST(req: NextRequest) {
   try {
+    const authResult = await requireAuth(req);
+    if ('error' in authResult) return authResult.error;
+
+    const { principal } = authResult;
     const body = await req.json();
     const { prompt, campaignId } = body;
+
+    if (principal.platformRole !== 'SUPER_ADMIN') {
+      const allowedCampaignIds = principal.campaignMemberships.map((m) => m.campaignId);
+      if (campaignId && !allowedCampaignIds.includes(campaignId)) {
+        return apiError('FORBIDDEN', 'Access to analytics for this campaign is denied', 403);
+      }
+    }
 
     if (!prompt) {
       return apiError('VALIDATION_ERROR', 'Prompt is required', 400);

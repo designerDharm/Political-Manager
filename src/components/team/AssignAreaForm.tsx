@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { UserCheck, MapPin, Check, AlertCircle, RotateCw } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { useCampaignRealtime } from '@/hooks/useCampaignRealtime';
 
 export function AssignAreaForm({
   campaignId,
@@ -39,6 +40,15 @@ export function AssignAreaForm({
     if (!selectedBooth && booths.length > 0) setSelectedBooth(booths[0].id);
   }, [booths, selectedBooth]);
 
+  const { connectionState } = useCampaignRealtime({
+    campaignId,
+    onEvent: (event) => {
+      if (event.type.startsWith('ASSIGNMENT_') || event.type.startsWith('MEMBER_')) {
+        router.refresh();
+      }
+    },
+  });
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const effectiveUserId = selectedUser || users[0]?.id;
@@ -74,6 +84,8 @@ export function AssignAreaForm({
           scopeTarget,
           taskType,
           notes,
+          boothId: assignmentType === 'Booth' && activeBooth ? activeBooth.id : undefined,
+          wardId: assignmentType === 'Ward' && activeWard ? activeWard.id : undefined,
         }),
       });
 
@@ -83,6 +95,7 @@ export function AssignAreaForm({
       setMessage('Area successfully assigned to field agent!');
       router.refresh();
     } catch (err: any) {
+
       setError(err.message || 'Failed to assign area');
 
     } finally {

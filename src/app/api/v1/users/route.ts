@@ -1,10 +1,48 @@
 import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { apiSuccess, apiError } from '@/lib/api/response';
-import crypto from 'crypto';
+import { requireAuth, requireCampaignAccess, hashPassword } from '@/lib/auth';
 
 export async function GET(req: NextRequest) {
   try {
+    const authResult = await requireAuth(req);
+    if ('error' in authResult) return authResult.error;
+
+    const { searchParams } = new URL(req.url);
+    const campaignId = searchParams.get('campaignId');
+
+    if (campaignId) {
+      const access = await requireCampaignAccess(authResult.principal, campaignId);
+      if ('error' in access) return access.error;
+
+      // Return users belonging to this campaign
+      const memberships = await prisma.campaignMembership.findMany({
+        where: { campaignId, active: true },
+        include: {
+          user: {
+            include: {
+              assignments: { where: { campaignId } },
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      const users = memberships.map((m) => ({
+        ...m.user,
+        campaignRole: m.role,
+        scopeType: m.scopeType,
+        scopeIds: m.scopeIds,
+      }));
+
+      return apiSuccess(users);
+    }
+
+    // If super admin or no campaignId requested
+    if (authResult.principal.platformRole !== 'SUPER_ADMIN') {
+      return apiError('FORBIDDEN', 'campaignId is required to list users', 403);
+    }
+
     const users = await prisma.user.findMany({
       include: {
         organization: true,
@@ -14,63 +52,104 @@ export async function GET(req: NextRequest) {
     });
 
     return apiSuccess(users);
-  } catch (err) {
+  } catch (err: any) {
     return apiError('INTERNAL_ERROR', 'Failed to retrieve users', 500, String(err));
   }
 }
 
 export async function POST(req: NextRequest) {
   try {
+    const authResult = await requireAuth(req);
+    if ('error' in authResult) return authResult.error;
+
     const body = await req.json();
-    const { email, password, displayName, role, phone, organizationId } = body;
+    const { email, password, displayName, role, phone, campaignId, scopeType, scopeIds } = body;
 
-    if (!email || !password || !displayName) {
-      return apiError('VALIDATION_ERROR', 'Email, password, and display name are required', 400);
+    if (!email || !displayName) {
+      return apiError('VALIDATION_ERROR', 'Email and display name are required', 400);
     }
 
-    const existing = await prisma.user.findUnique({
-      where: { email: email.toLowerCase().trim() },
+    const normalizedEmail = email.toLowerCase().trim();
+
+    // Verify campaign access if campaignId provided
+    if (campaignId) {
+      const access = await requireCampaignAccess(authResult.principal, campaignId);
+      if ('error' in access) return access.error;
+    } else if (authResult.principal.platformRole === 'POLITICAL_AGENT') {
+      return apiError('FORBIDDEN', 'Political agents cannot create users', 403);
+    }
+
+    let user = await prisma.user.findUnique({
+      where: { email: normalizedEmail },
     });
 
-    if (existing) {
-      return apiError('CONFLICT', `User with email '${email}' already exists`, 409);
-    }
-
-    // Default to first organization if not specified
-    let targetOrgId = organizationId;
+    const targetOrgId = authResult.principal.organizationId || (await prisma.organization.findFirst())?.id;
     if (!targetOrgId) {
-      const firstOrg = await prisma.organization.findFirst();
-      if (!firstOrg) {
-        return apiError('VALIDATION_ERROR', 'No organization exists. Please create an organization first.', 400);
-      }
-      targetOrgId = firstOrg.id;
+      return apiError('VALIDATION_ERROR', 'No organization found', 400);
     }
 
-    const user = await prisma.user.create({
-      data: {
-        email: email.toLowerCase().trim(),
-        displayName: displayName.trim(),
-        role: role || 'CAMPAIGN_ADMIN',
-        phone: phone ? phone.trim() : null,
-        organizationId: targetOrgId,
-        status: 'ACTIVE',
-      },
-      include: {
-        organization: true,
-      },
-    });
+    // Prevent privilege escalation: only existing SUPER_ADMIN can grant SUPER_ADMIN
+    if (role === 'SUPER_ADMIN' && authResult.principal.platformRole !== 'SUPER_ADMIN') {
+      return apiError('FORBIDDEN', 'Privilege escalation rejected: only Super Admins can provision Super Admin accounts', 403);
+    }
+    const effectiveRole = role || 'POLITICAL_AGENT';
 
-    await prisma.auditEvent.create({
-      data: {
-        organizationId: targetOrgId,
-        action: 'PROVISION_USER',
-        resource: `user:${user.id}`,
-        details: JSON.stringify({ email: user.email, role: user.role, displayName: user.displayName }),
-      },
-    });
+    if (!user) {
+      const initialPassword = password || 'Password@123';
+      const passwordHash = await hashPassword(initialPassword);
 
-    return apiSuccess(user, { message: 'User provisioned successfully' }, 201);
-  } catch (err) {
+      user = await prisma.user.create({
+        data: {
+          email: normalizedEmail,
+          passwordHash,
+          displayName: displayName.trim(),
+          role: effectiveRole,
+          phone: phone ? phone.trim() : null,
+          organizationId: targetOrgId,
+          status: 'ACTIVE',
+        },
+      });
+    }
+
+    // If campaignId was specified, add user as CampaignMembership if not already a member
+    if (campaignId) {
+      const existingMembership = await prisma.campaignMembership.findFirst({
+        where: { campaignId, userId: user.id },
+      });
+
+      if (!existingMembership) {
+        await prisma.campaignMembership.create({
+          data: {
+            campaignId,
+            userId: user.id,
+            role: effectiveRole,
+            scopeType: scopeType || 'ALL',
+            scopeIds: scopeIds ? JSON.stringify(scopeIds) : '[]',
+            active: true,
+          },
+        });
+      } else if (!existingMembership.active) {
+        await prisma.campaignMembership.update({
+          where: { id: existingMembership.id },
+          data: { active: true, role: effectiveRole },
+        });
+      }
+
+      await prisma.auditEvent.create({
+        data: {
+          organizationId: targetOrgId,
+          campaignId,
+          actorId: authResult.principal.userId,
+          action: 'AGENT_ADDED_TO_CAMPAIGN',
+          resource: `User:${user.id}`,
+          details: JSON.stringify({ email: user.email, role: effectiveRole, displayName: user.displayName }),
+        },
+      });
+    }
+
+    return apiSuccess(user, { message: 'Team member processed successfully' }, 201);
+  } catch (err: any) {
     return apiError('INTERNAL_ERROR', 'Failed to provision user', 500, String(err));
   }
 }
+

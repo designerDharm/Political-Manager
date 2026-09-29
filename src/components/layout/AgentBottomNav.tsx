@@ -8,17 +8,20 @@ import {
   Search,
   MapPin,
   User,
+  CalendarCheck,
 } from 'lucide-react';
 
 export function AgentBottomNav() {
   const pathname = usePathname();
 
   const navItems = [
-    { name: 'Tasks', href: '/agent/tasks', icon: ListTodo },
+    { name: 'Home', href: '/agent', icon: ListTodo },
     { name: 'Search', href: '/agent/search', icon: Search },
+    { name: 'Poll Day', href: '/agent/election-day', icon: CalendarCheck },
     { name: 'Map', href: '/agent/map', icon: MapPin },
-    { name: 'Admin', href: '/super-admin', icon: User },
+    { name: 'Profile', href: '/agent/profile', icon: User },
   ];
+
 
   return (
     <nav className="fixed bottom-0 max-w-md w-full bg-white border-t border-slate-200 py-2.5 px-8 flex items-center justify-between z-30 shadow-lg">

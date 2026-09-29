@@ -22,6 +22,7 @@ import {
   UsersRound,
   AlertCircle,
   FileSpreadsheet,
+  Home,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -37,6 +38,7 @@ export function Sidebar({ role, campaignId = 'sharma-assembly-2026' }: SidebarPr
     { name: 'Organizations', href: '/super-admin/organizations', icon: Building2 },
     { name: 'Campaigns', href: '/super-admin/campaigns', icon: Megaphone },
     { name: 'Users', href: '/super-admin/users', icon: Users },
+    { name: 'Parties & Symbols', href: '/super-admin/parties', icon: UserCheck },
     { name: 'Data Processing', href: '/super-admin/data-processing', icon: Database },
     { name: 'AI Jobs', href: '/super-admin/ai-jobs', icon: Cpu },
     { name: 'System Logs', href: '/super-admin/system-logs', icon: FileText },
@@ -50,6 +52,7 @@ export function Sidebar({ role, campaignId = 'sharma-assembly-2026' }: SidebarPr
     { name: 'Campaigns', href: `/campaigns/new`, icon: Megaphone },
     { name: 'Candidates', href: `/campaigns/${campaignId}/candidates`, icon: UserCheck },
     { name: 'Voter Data', href: `/campaigns/${campaignId}/voters`, icon: Users },
+    { name: 'Households', href: `/campaigns/${campaignId}/households`, icon: Home },
     { name: 'Field Operations', href: `/campaigns/${campaignId}/field`, icon: MapPin },
     { name: 'Analytics', href: `/campaigns/${campaignId}/analytics`, icon: BarChart3 },
     { name: 'Election Day', href: `/campaigns/${campaignId}/election-day`, icon: CalendarCheck },
@@ -91,9 +94,21 @@ export function Sidebar({ role, campaignId = 'sharma-assembly-2026' }: SidebarPr
         })}
       </div>
 
-      {/* Footer Switcher Shortcut */}
+      {/* Footer Switcher Shortcut & Logout */}
       <div className="p-4 border-t border-slate-800/60 bg-slate-950/40 text-xs text-slate-400 flex flex-col gap-2">
-        <span className="uppercase tracking-wider font-semibold text-[10px] text-slate-500">Quick Role Switch</span>
+        <div className="flex items-center justify-between">
+          <span className="uppercase tracking-wider font-semibold text-[10px] text-slate-500">Navigation</span>
+          <button
+            type="button"
+            onClick={async () => {
+              await fetch('/api/v1/auth/logout', { method: 'POST' });
+              window.location.href = '/login';
+            }}
+            className="text-[11px] font-semibold text-rose-400 hover:text-rose-300 transition"
+          >
+            Sign Out
+          </button>
+        </div>
         <div className="flex items-center gap-1.5">
           <Link
             href="/super-admin"

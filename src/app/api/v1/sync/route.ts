@@ -1,13 +1,14 @@
 import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { apiSuccess, apiError } from '@/lib/api/response';
+import { requireAuth, getAgentBoothScope } from '@/lib/auth';
 
 interface MutationEnvelope {
   mutationId: string;
   deviceId: string;
   userId: string;
   campaignId: string;
-  entityType: 'household' | 'voter' | 'issue' | 'interaction' | 'vis';
+  entityType: 'household' | 'voter' | 'issue' | 'interaction' | 'vis' | 'VIS_EVENT';
   entityId: string;
   baseVersion: number;
   operation: string;
@@ -18,6 +19,10 @@ interface MutationEnvelope {
 
 export async function POST(req: NextRequest) {
   try {
+    const authResult = await requireAuth(req);
+    if ('error' in authResult) return authResult.error;
+
+    const { principal } = authResult;
     const body = await req.json();
     const { mutations } = body as { mutations: MutationEnvelope[] };
 
@@ -31,7 +36,6 @@ export async function POST(req: NextRequest) {
       const {
         mutationId,
         deviceId,
-        userId,
         campaignId,
         entityType,
         entityId,
@@ -42,30 +46,40 @@ export async function POST(req: NextRequest) {
       } = mut;
 
       try {
-        // Validate user authorization or fallback to active agent/admin
-        let user = await prisma.user.findUnique({
-          where: { id: userId },
-          include: { devices: true },
-        });
-
-        if (!user) {
-          user = await prisma.user.findFirst({
-            where: { status: 'ACTIVE' },
-            include: { devices: true },
-          });
+        // Enforce campaign access
+        if (principal.platformRole !== 'SUPER_ADMIN') {
+          const allowedCampaignIds = principal.campaignMemberships.map((m) => m.campaignId);
+          if (campaignId && !allowedCampaignIds.includes(campaignId)) {
+            results.push({
+              mutationId,
+              status: 'REJECTED',
+              reason: 'FORBIDDEN_CAMPAIGN_ACCESS',
+              entityId,
+            });
+            continue;
+          }
         }
 
-        if (!user) {
+        const validUserId = principal.userId;
+
+        // Idempotency Check: check if mutation was already processed via AuditEvent
+        const existingAudit = await prisma.auditEvent.findFirst({
+          where: {
+            details: {
+              contains: `"mutationId":"${mutationId}"`,
+            },
+          },
+        });
+
+        if (existingAudit) {
           results.push({
             mutationId,
-            status: 'REJECTED',
-            reason: 'USER_NOT_FOUND_OR_REVOKED',
+            status: 'ALREADY_APPLIED',
             entityId,
+            reason: 'IDEMPOTENT_TRANSACTION_ALREADY_COMMITTED',
           });
           continue;
         }
-
-        const validUserId = user.id;
 
         // Handle Entity Mutation
         if (entityType === 'household') {
@@ -81,10 +95,6 @@ export async function POST(req: NextRequest) {
           }
 
           if (!current) {
-            current = await prisma.household.findFirst();
-          }
-
-          if (!current) {
             results.push({
               mutationId,
               status: 'REJECTED',
@@ -94,8 +104,22 @@ export async function POST(req: NextRequest) {
             continue;
           }
 
+          // Verify Agent assignment scope on target household
+          if (principal.platformRole === 'POLITICAL_AGENT') {
+            const allowedBooths = await getAgentBoothScope(principal, current.campaignId);
+            if (allowedBooths !== null && current.boothId && !allowedBooths.includes(current.boothId)) {
+              results.push({
+                mutationId,
+                status: 'FORBIDDEN',
+                reason: 'FORBIDDEN_OUTSIDE_ASSIGNED_BOOTH_SCOPE',
+                entityId,
+              });
+              continue;
+            }
+          }
+
           // Optimistic version conflict detection
-          if (current.version !== baseVersion) {
+          if (typeof baseVersion === 'number' && current.version !== baseVersion) {
             results.push({
               mutationId,
               status: 'CONFLICT',
@@ -107,57 +131,215 @@ export async function POST(req: NextRequest) {
             continue;
           }
 
-          // Apply mutation and bump version
-          // Apply mutation and bump version
-          const updated = await prisma.household.update({
-            where: { id: current.id },
-            data: {
-              status: payload.status || (payload.verificationStatus === 'VERIFIED' ? 'Verified' : current.status),
-              version: { increment: 1 },
-            },
-          });
-
-          // Record interaction
-          if (payload.visitStatus || payload.interactionOutcome) {
-            await prisma.interaction.create({
+          // Atomic execution of update, interaction, and audit event
+          const updated = await prisma.$transaction(async (tx) => {
+            const up = await tx.household.update({
+              where: { id: current.id },
               data: {
-                campaignId: current.campaignId,
-                householdId: current.id,
-                agentId: validUserId,
-                status: payload.visitStatus || 'CONTACTED',
-                notes: payload.notes || null,
+                status: payload.status || (payload.verificationStatus === 'VERIFIED' ? 'Verified' : current.status),
+                version: { increment: 1 },
               },
             });
-          }
+
+            if (payload.visitStatus || payload.notes) {
+              await tx.interaction.create({
+                data: {
+                  campaignId: current.campaignId,
+                  householdId: current.id,
+                  agentId: validUserId,
+                  status: payload.visitStatus || 'VISITED',
+                  notes: payload.notes || null,
+                },
+              });
+            }
+
+            // Emit AuditEvent for Step 7 Realtime SSE Propagation
+            await tx.auditEvent.create({
+              data: {
+                actorId: validUserId,
+                organizationId: principal.organizationId,
+                campaignId: current.campaignId,
+                action: 'FIELD_VISIT_RECORDED',
+                resource: `household:${current.id}`,
+                details: JSON.stringify({
+                  mutationId,
+                  deviceId,
+                  householdId: current.id,
+                  code: current.code,
+                  boothId: current.boothId,
+                  agentId: validUserId,
+                  visitStatus: payload.visitStatus || 'VISITED',
+                  clientOccurredAt,
+                }),
+              },
+            });
+
+            return up;
+          });
 
           results.push({
             mutationId,
             status: 'APPLIED',
             newVersion: updated.version,
-            entityId,
+            entityId: current.id,
           });
         } else if (entityType === 'issue') {
-          // Create issue from field
+          // Verify agent scope if boothId provided
+          if (principal.platformRole === 'POLITICAL_AGENT' && payload.boothId) {
+            const allowedBooths = await getAgentBoothScope(principal, campaignId);
+            if (allowedBooths !== null && !allowedBooths.includes(payload.boothId)) {
+              results.push({
+                mutationId,
+                status: 'FORBIDDEN',
+                reason: 'FORBIDDEN_OUTSIDE_ASSIGNED_BOOTH_SCOPE',
+                entityId,
+              });
+              continue;
+            }
+          }
+
           const count = await prisma.issue.count();
           const code = `#ISS-2026-${String(count + 1).padStart(3, '0')}`;
-          const newIssue = await prisma.issue.create({
-            data: {
-              campaignId,
-              code,
-              title: payload.title || 'Field Community Issue',
-              description: payload.description || '',
-              category: payload.category || 'CIVIC',
-              priority: payload.priority || 'MEDIUM',
-              status: 'OPEN',
-              reporterId: userId,
-              householdId: payload.householdId || null,
-            },
+          
+          const newIssue = await prisma.$transaction(async (tx) => {
+            const createdIssue = await tx.issue.create({
+              data: {
+                campaignId,
+                code,
+                title: payload.title || 'Field Community Issue',
+                description: payload.description || '',
+                category: payload.category || 'CIVIC',
+                priority: payload.priority || 'MEDIUM',
+                status: 'OPEN',
+                reporterId: validUserId,
+                householdId: payload.householdId || null,
+              },
+            });
+
+            await tx.auditEvent.create({
+              data: {
+                actorId: validUserId,
+                organizationId: principal.organizationId,
+                campaignId,
+                action: 'ISSUE_CREATED',
+                resource: `issue:${createdIssue.id}`,
+                details: JSON.stringify({
+                  mutationId,
+                  deviceId,
+                  issueId: createdIssue.id,
+                  boothId: payload.boothId || null,
+                  priority: createdIssue.priority,
+                  clientOccurredAt,
+                }),
+              },
+            });
+
+            return createdIssue;
           });
 
           results.push({
             mutationId,
             status: 'APPLIED',
             newEntityId: newIssue.id,
+          });
+        } else if (entityType === 'vis' || entityType === 'VIS_EVENT') {
+          // Offline VIS issuance mutation
+          const { voterId, boothId, eventType, assistance } = payload;
+          if (!voterId || !boothId) {
+            results.push({
+              mutationId,
+              status: 'REJECTED',
+              reason: 'VALIDATION_ERROR: voterId and boothId required',
+              entityId,
+            });
+            continue;
+          }
+
+          // Verify voter exists in this campaign
+          const voter = await prisma.voter.findUnique({
+            where: { id: voterId },
+          });
+
+          if (!voter || voter.campaignId !== campaignId) {
+            results.push({
+              mutationId,
+              status: 'REJECTED',
+              reason: 'VOTER_NOT_FOUND_IN_CAMPAIGN',
+              entityId,
+            });
+            continue;
+          }
+
+          // Verify booth mismatch (voter must belong to booth)
+          if (voter.boothId !== boothId) {
+            results.push({
+              mutationId,
+              status: 'REJECTED',
+              reason: 'BOOTH_MISMATCH: Voter does not belong to specified booth',
+              entityId,
+            });
+            continue;
+          }
+
+          // Enforce agent booth scope
+          if (principal.platformRole === 'POLITICAL_AGENT') {
+            const allowedBooths = await getAgentBoothScope(principal, campaignId);
+            if (allowedBooths !== null && !allowedBooths.includes(boothId)) {
+              results.push({
+                mutationId,
+                status: 'FORBIDDEN',
+                reason: 'FORBIDDEN_OUTSIDE_ASSIGNED_BOOTH_SCOPE',
+                entityId,
+              });
+              continue;
+            }
+          }
+
+          // Idempotency: check if identical mutation already recorded or voter already issued
+          const existingVis = await prisma.visEvent.findFirst({
+            where: { voterId, campaignId },
+            orderBy: { occurredAt: 'desc' },
+          });
+
+          const isReissue = eventType === 'REISSUED' || (existingVis && existingVis.eventType === 'ISSUED');
+          const finalEventType = isReissue ? 'REISSUED' : 'ISSUED';
+
+          const createdVis = await prisma.$transaction(async (tx) => {
+            const vis = await tx.visEvent.create({
+              data: {
+                campaignId,
+                voterId,
+                boothId,
+                agentId: validUserId,
+                eventType: finalEventType,
+                assistance: assistance || null,
+              },
+            });
+
+            await tx.auditEvent.create({
+              data: {
+                actorId: validUserId,
+                organizationId: principal.organizationId,
+                campaignId,
+                action: finalEventType === 'REISSUED' ? 'VIS_REISSUED' : 'VIS_ISSUED',
+                resource: `vis:${vis.id}`,
+                details: JSON.stringify({
+                  mutationId,
+                  deviceId,
+                  voterId,
+                  boothId,
+                  clientOccurredAt,
+                }),
+              },
+            });
+
+            return vis;
+          });
+
+          results.push({
+            mutationId,
+            status: 'APPLIED',
+            newEntityId: createdVis.id,
           });
         } else {
           results.push({

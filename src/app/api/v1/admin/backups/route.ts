@@ -1,32 +1,40 @@
 import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { apiSuccess, apiError } from '@/lib/api/response';
-import fs from 'fs';
-import path from 'path';
+import { requirePlatformRole } from '@/lib/auth';
+import { createPostgresBackup, BackupMetadata } from '@/lib/backup/postgresBackup';
 
+// GET /api/v1/admin/backups - List verified PostgreSQL backups (Super Admin only)
 export async function GET(req: NextRequest) {
   try {
+    const authResult = await requirePlatformRole(req, ['SUPER_ADMIN']);
+    if ('error' in authResult) return authResult.error;
+
     const backupRecords = await prisma.auditEvent.findMany({
-      where: { action: 'TRIGGER_BACKUP' },
+      where: { action: { in: ['BACKUP_CREATED', 'TRIGGER_BACKUP'] } },
       orderBy: { createdAt: 'desc' },
-      take: 20,
+      take: 30,
     });
 
     const backups = backupRecords.map((b) => {
-      let payload: any = {};
+      let meta: Partial<BackupMetadata> = {};
       try {
-        payload = b.details ? JSON.parse(b.details) : {};
-      } catch (e) {
-        payload = {};
+        meta = b.details ? JSON.parse(b.details) : {};
+      } catch {
+        meta = {};
       }
 
       return {
-        id: b.id,
-        filename: payload.filename || `campaignops_backup_${new Date(b.createdAt).toISOString().replace(/[:.]/g, '-')}.db`,
-        size: payload.size || '128 KB',
-        type: 'FULL_SNAPSHOT',
-        timestamp: new Date(b.createdAt).toLocaleString(),
-        status: 'VERIFIED',
+        id: meta.id || b.id,
+        filename: meta.filename || `campaignops_backup_${new Date(b.createdAt).toISOString().replace(/[:.]/g, '-')}.dump`,
+        size: meta.sizeFormatted || '128 KB',
+        sizeBytes: meta.sizeBytes || 0,
+        sha256: meta.sha256 || 'N/A',
+        format: meta.format || 'custom',
+        database: meta.database || 'campaignops',
+        timestamp: new Date(b.createdAt).toISOString(),
+        status: meta.status || 'COMPLETED',
+        createdBy: b.actorId || 'system',
       };
     });
 
@@ -36,50 +44,36 @@ export async function GET(req: NextRequest) {
   }
 }
 
+// POST /api/v1/admin/backups - Trigger real PostgreSQL pg_dump snapshot (Super Admin only)
 export async function POST(req: NextRequest) {
   try {
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const filename = `campaignops_backup_${timestamp}.db`;
-    const backupsDir = path.join(process.cwd(), 'backups');
+    const authResult = await requirePlatformRole(req, ['SUPER_ADMIN']);
+    if ('error' in authResult) return authResult.error;
 
-    if (!fs.existsSync(backupsDir)) {
-      fs.mkdirSync(backupsDir, { recursive: true });
-    }
-
-    const dbPath = path.join(process.cwd(), 'prisma', 'dev.db');
-    let sizeStr = '0 KB';
-
-    if (fs.existsSync(dbPath)) {
-      const destPath = path.join(backupsDir, filename);
-      fs.copyFileSync(dbPath, destPath);
-      const stat = fs.statSync(destPath);
-      sizeStr = `${Math.round(stat.size / 1024)} KB`;
-    }
-
+    const { principal } = authResult;
     const org = await prisma.organization.findFirst();
-    const orgId = org?.id || 'default-org';
+    const orgId = principal.organizationId || org?.id || 'default-org';
 
-    const audit = await prisma.auditEvent.create({
-      data: {
-        organizationId: orgId,
-        action: 'TRIGGER_BACKUP',
-        resource: `backup:${filename}`,
-        details: JSON.stringify({ filename, size: sizeStr, path: path.join('backups', filename) }),
-      },
-    });
+    // Execute real pg_dump
+    const metadata = await createPostgresBackup(principal.userId, orgId);
 
     return apiSuccess(
       {
-        id: audit.id,
-        filename,
-        size: sizeStr,
-        timestamp: new Date().toLocaleString(),
-        status: 'VERIFIED',
+        id: metadata.id,
+        filename: metadata.filename,
+        size: metadata.sizeFormatted,
+        sizeBytes: metadata.sizeBytes,
+        sha256: metadata.sha256,
+        format: metadata.format,
+        database: metadata.database,
+        timestamp: metadata.createdAt,
+        status: metadata.status,
       },
-      { message: 'Database snapshot generated and verified' },
+      { message: 'PostgreSQL database snapshot generated and verified' },
       201
     );
-  } catch (err) {
-    return apiError('INTERNAL_ERROR', 'Failed to trigger database backup', 500, String(err));
+  } catch (err: any) {
+    console.error('Database backup failure:', err);
+    return apiError('INTERNAL_ERROR', 'Failed to generate database backup', 500, err.message);
   }
 }

@@ -24,20 +24,33 @@ import { AddTeamMemberModal } from '@/components/team/AddTeamMemberModal';
 export const revalidate = 0;
 
 export default async function TeamManagementPage({ params }: { params: { id: string } }) {
-  const [users, wards, booths, assignments] = await Promise.all([
-    prisma.user.findMany({
+  const [memberships, wards, booths, assignments] = await Promise.all([
+    prisma.campaignMembership.findMany({
+      where: { campaignId: params.id, active: true },
+      include: {
+        user: {
+          include: { assignments: { where: { campaignId: params.id } } },
+        },
+      },
       orderBy: { createdAt: 'desc' },
-      include: { assignments: { where: { campaignId: params.id } } },
     }),
-    prisma.ward.findMany({ where: { campaignId: params.id } }),
-    prisma.booth.findMany({ where: { campaignId: params.id } }),
-    prisma.assignment.findMany({ where: { campaignId: params.id } }),
+    prisma.ward.findMany({ where: { campaignId: params.id }, orderBy: { wardNumber: 'asc' } }),
+    prisma.booth.findMany({ where: { campaignId: params.id }, orderBy: { boothNumber: 'asc' } }),
+    prisma.assignment.findMany({ where: { campaignId: params.id }, orderBy: { createdAt: 'desc' } }),
   ]);
+
+  const users = memberships.map((m) => ({
+    ...m.user,
+    role: m.role,
+    scopeType: m.scopeType,
+    scopeIds: m.scopeIds,
+  }));
 
   const totalMembers = users.length;
   const adminCount = users.filter((u) => u.role === 'CAMPAIGN_ADMIN' || u.role === 'SUPER_ADMIN').length;
   const boothManagerCount = users.filter((u) => u.role === 'BOOTH_MANAGER').length;
   const agentCount = users.filter((u) => u.role === 'POLITICAL_AGENT' || u.role === 'AGENT').length;
+
 
   return (
     <div className="flex min-h-screen bg-slate-50">

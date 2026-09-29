@@ -17,6 +17,27 @@ export default function VoterUploadPage({ params }: { params: { id: string } }) 
   const [error, setError] = useState('');
   const [importJobs, setImportJobs] = useState<any[]>([]);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [wardsList, setWardsList] = useState<any[]>([]);
+  const [selectedWardId, setSelectedWardId] = useState<string>('');
+  const [selectedBoothId, setSelectedBoothId] = useState<string>('');
+
+  const fetchGeography = async () => {
+    try {
+      const res = await fetch(`/api/v1/campaigns/${params.id}/wards`);
+      const json = await res.json();
+      if (json.data && Array.isArray(json.data)) {
+        setWardsList(json.data);
+        if (json.data.length > 0) {
+          setSelectedWardId(json.data[0].id);
+          if (json.data[0].booths && json.data[0].booths.length > 0) {
+            setSelectedBoothId(json.data[0].booths[0].id);
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Failed to load wards hierarchy:', e);
+    }
+  };
 
   const fetchImports = async () => {
     try {
@@ -32,6 +53,7 @@ export default function VoterUploadPage({ params }: { params: { id: string } }) 
 
   useEffect(() => {
     fetchImports();
+    fetchGeography();
   }, [params.id]);
 
   const steps = [
@@ -45,33 +67,48 @@ export default function VoterUploadPage({ params }: { params: { id: string } }) 
     if (e.target.files && e.target.files.length > 0) {
       const file = e.target.files[0];
       setSelectedFile(file);
-      processUpload(file.name, `${(file.size / (1024 * 1024)).toFixed(1)} MB`);
+      processUpload(file);
     }
   };
 
-  const processUpload = async (filename?: string, fileSize?: string) => {
+  const processUpload = async (fileObj?: File) => {
+    const file = fileObj || selectedFile;
     setLoading(true);
     setMessage('');
     setError('');
     setStep(2);
 
     try {
-      const res = await fetch('/api/v1/imports', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          campaignId: params.id,
-          filename: filename || 'Ward_12_Central_Part_1.pdf',
-          fileSize: fileSize || '12.4 MB',
-        }),
-      });
+      let res: Response;
+      if (file) {
+        const formData = new FormData();
+        formData.append('campaignId', params.id);
+        if (selectedWardId) formData.append('wardId', selectedWardId);
+        if (selectedBoothId) formData.append('boothId', selectedBoothId);
+        formData.append('file', file);
+
+        res = await fetch('/api/v1/imports', {
+          method: 'POST',
+          body: formData,
+        });
+      } else {
+        res = await fetch('/api/v1/imports', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            campaignId: params.id,
+            wardId: selectedWardId || undefined,
+            boothId: selectedBoothId || undefined,
+          }),
+        });
+      }
 
       const json = await res.json();
       if (!res.ok) {
         throw new Error(json.error?.message || 'Failed to process electoral roll upload');
       }
 
-      setMessage(`File "${json.data?.originalFilename || filename}" uploaded and OCR extracted successfully!`);
+      setMessage(`File "${json.data?.originalFilename || file?.name || 'Roll'}" uploaded and ${json.data?.extractedVotersCount || 0} voters extracted!`);
       await fetchImports();
       setStep(3);
 
@@ -173,6 +210,56 @@ export default function VoterUploadPage({ params }: { params: { id: string } }) 
           </div>
 
           <div className="max-w-5xl space-y-6">
+            {/* Target Geography Dropdowns */}
+            {wardsList.length > 0 && (
+              <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="text-xs">
+                  <span className="font-bold text-slate-900 block">Target Electoral Roll Geography</span>
+                  <span className="text-slate-500">Assign incoming voter list to specific Ward and Polling Booth</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Ward / Locality</label>
+                    <select
+                      value={selectedWardId}
+                      onChange={(e) => {
+                        const wId = e.target.value;
+                        setSelectedWardId(wId);
+                        const found = wardsList.find(w => w.id === wId);
+                        if (found && found.booths && found.booths.length > 0) {
+                          setSelectedBoothId(found.booths[0].id);
+                        } else {
+                          setSelectedBoothId('');
+                        }
+                      }}
+                      className="px-3 py-1.5 text-xs bg-slate-50 border border-slate-300 rounded-lg text-slate-800 font-semibold focus:outline-none"
+                    >
+                      {wardsList.map((w) => (
+                        <option key={w.id} value={w.id}>
+                          {w.name} (#{w.wardNumber})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Target Polling Booth</label>
+                    <select
+                      value={selectedBoothId}
+                      onChange={(e) => setSelectedBoothId(e.target.value)}
+                      className="px-3 py-1.5 text-xs bg-slate-50 border border-slate-300 rounded-lg text-slate-800 font-semibold focus:outline-none"
+                    >
+                      {(wardsList.find(w => w.id === selectedWardId)?.booths || []).map((b: any) => (
+                        <option key={b.id} value={b.id}>
+                          Booth #{b.boothNumber}: {b.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Drag & Drop Upload Zone */}
             <div
               onClick={() => {
@@ -210,7 +297,7 @@ export default function VoterUploadPage({ params }: { params: { id: string } }) 
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
-                    processUpload('Ward_12_Central_Part_1.pdf', '12.4 MB');
+                    processUpload();
                   }}
                   disabled={loading}
                   className="py-2.5 px-6 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-lg shadow-md shadow-blue-500/25 transition disabled:opacity-50 flex items-center gap-2"
