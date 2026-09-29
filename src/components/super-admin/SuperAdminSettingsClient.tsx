@@ -48,7 +48,7 @@ export default function SuperAdminSettingsClient({ initialSettings }: { initialS
       <Sidebar role="SUPER_ADMIN" />
 
       <div className="flex-1 flex flex-col min-w-0">
-        <TopHeader roleBadgeText="Super Admin" userName="Vikramaditya Rao" userRoleTitle="System Administrator" />
+        <TopHeader />
 
         <main className="flex-1 p-8 overflow-y-auto">
           <form onSubmit={handleSave}>

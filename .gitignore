@@ -41,3 +41,4 @@ backups/*.sql
 # runtime file uploads
 uploads/
 !uploads/.gitkeep
+.env.qa.local

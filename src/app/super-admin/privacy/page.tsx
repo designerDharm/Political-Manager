@@ -30,11 +30,7 @@ export default async function PrivacyGovernancePage() {
       <Sidebar role="SUPER_ADMIN" />
 
       <div className="flex-1 flex flex-col min-w-0">
-        <TopHeader
-          roleBadgeText="Super Admin"
-          userName="Rajesh Sharma"
-          userRoleTitle="System Owner"
-        />
+        <TopHeader />
 
         <main className="flex-1 p-8 overflow-y-auto">
           {/* Header */}

@@ -17,13 +17,34 @@ async function main() {
   const defaultPassword = 'password123';
   const pwdHash = await hashPassword(defaultPassword);
 
-  const org = await prisma.organization.findFirst();
+  let org = await prisma.organization.findFirst();
   if (!org) {
-    console.error('No organization found!');
-    process.exit(1);
+    org = await prisma.organization.create({
+      data: {
+        name: 'Democratic Operations Group',
+        slug: 'dem-ops',
+        status: 'ACTIVE',
+      },
+    });
+    console.log('Created Organization:', org.name);
   }
 
-  const campaign = await prisma.campaign.findFirst({ where: { status: 'ACTIVE' } }) || await prisma.campaign.findFirst();
+  let campaign = await prisma.campaign.findFirst({ where: { status: 'ACTIVE' } }) || await prisma.campaign.findFirst();
+  if (!campaign) {
+    campaign = await prisma.campaign.create({
+      data: {
+        organizationId: org.id,
+        name: 'Demo Assembly Campaign 2026',
+        electionName: 'State Legislative Assembly 2026',
+        electionLevel: 'STATE_ASSEMBLY',
+        electionYear: 2026,
+        status: 'ACTIVE',
+        targetVoters: 50000,
+        targetCoverage: 80,
+      },
+    });
+    console.log('Created Campaign:', campaign.name);
+  }
 
   // 1. Super Admin
   const superAdmin = await prisma.user.upsert({

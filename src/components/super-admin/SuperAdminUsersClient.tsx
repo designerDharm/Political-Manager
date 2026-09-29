@@ -86,7 +86,7 @@ export default function SuperAdminUsersClient({
       <Sidebar role="SUPER_ADMIN" />
 
       <div className="flex-1 flex flex-col min-w-0">
-        <TopHeader roleBadgeText="Super Admin" userName="Vikramaditya Rao" userRoleTitle="System Administrator" />
+        <TopHeader />
 
         <main className="flex-1 p-8 overflow-y-auto">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">

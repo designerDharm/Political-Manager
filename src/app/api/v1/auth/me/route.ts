@@ -16,6 +16,7 @@ export async function GET(req: NextRequest) {
         displayName: principal.displayName,
         role: principal.platformRole,
         organizationId: principal.organizationId,
+        avatarUrl: principal.avatarUrl,
         campaigns: principal.campaignMemberships,
       },
     });

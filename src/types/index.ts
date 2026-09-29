@@ -25,6 +25,7 @@ export interface AuthPrincipal {
   displayName: string;
   platformRole: UserRole;
   organizationId: string;
+  avatarUrl?: string | null;
   campaignMemberships: CampaignAccess[];
   sessionId: string;
 }

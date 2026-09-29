@@ -147,6 +147,7 @@ export async function getPrincipalFromToken(token: string): Promise<AuthPrincipa
     displayName: user.displayName,
     platformRole: user.role as UserRole,
     organizationId: user.organizationId,
+    avatarUrl: user.avatarUrl,
     campaignMemberships,
     sessionId: session.id,
   };

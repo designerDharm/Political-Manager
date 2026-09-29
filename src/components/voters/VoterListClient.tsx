@@ -169,11 +169,7 @@ export default function VoterListClient({
       <Sidebar role="CAMPAIGN_ADMIN" campaignId={campaignId} />
 
       <div className="flex-1 flex flex-col min-w-0">
-        <TopHeader
-          roleBadgeText="Campaign Admin"
-          userName="Rajesh Sharma"
-          userRoleTitle="Campaign Admin"
-        />
+        <TopHeader />
 
         <main className="flex-1 p-8 overflow-y-auto">
           {/* Breadcrumb */}
