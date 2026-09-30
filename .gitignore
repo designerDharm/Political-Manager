@@ -36,6 +36,7 @@ next-env.d.ts
 backups/*.dump
 backups/*.db
 backups/*.sql
+backups/*.json
 *.dump
 
 # runtime file uploads
