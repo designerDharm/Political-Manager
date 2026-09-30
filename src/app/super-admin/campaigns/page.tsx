@@ -9,13 +9,23 @@ import { Megaphone, Plus, Users, Calendar, ArrowRight } from 'lucide-react';
 export const revalidate = 0;
 
 export default async function SuperAdminCampaignsPage() {
-  const campaigns = await prisma.campaign.findMany({
-    include: {
-      organization: true,
-      _count: { select: { voters: true, households: true, issues: true } },
-    },
-    orderBy: { createdAt: 'desc' },
-  });
+  const [campaigns, totalVotersCount, totalTargetVoters] = await Promise.all([
+    prisma.campaign.findMany({
+      include: {
+        organization: true,
+        _count: { select: { voters: true, households: true, issues: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    }),
+    prisma.voter.count(),
+    prisma.campaign.aggregate({
+      _sum: {
+        targetVoters: true,
+      },
+    }),
+  ]);
+
+  const plannedElectorate = totalTargetVoters._sum.targetVoters || 0;
 
   return (
     <div className="flex min-h-screen bg-slate-50">
@@ -42,10 +52,11 @@ export default async function SuperAdminCampaignsPage() {
             </Link>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 mb-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
             <StatCard title="Total Campaigns" value={campaigns.length.toString()} subtitle="Across all clients" icon={Megaphone} iconColor="text-blue-600" iconBgColor="bg-blue-50" />
             <StatCard title="Active Campaigns" value={campaigns.filter((c) => c.status === 'ACTIVE').length.toString()} subtitle="In live operations" icon={Calendar} iconColor="text-emerald-600" iconBgColor="bg-emerald-50" badge={{ text: 'Running', type: 'success' }} />
-            <StatCard title="Managed Electors" value="1,24,580" subtitle="In electoral registry" icon={Users} iconColor="text-purple-600" iconBgColor="bg-purple-50" />
+            <StatCard title="Imported Electors" value={totalVotersCount.toLocaleString()} subtitle="Verified in database" icon={Users} iconColor="text-purple-600" iconBgColor="bg-purple-50" />
+            <StatCard title="Planned Electorate" value={plannedElectorate.toLocaleString()} subtitle="Aggregate planning target" icon={Users} iconColor="text-slate-600" iconBgColor="bg-slate-100" />
           </div>
 
           <div className="bg-white rounded-xl border border-slate-200 shadow-card p-6">

@@ -8,13 +8,16 @@ import { Database, CheckCircle2, AlertTriangle, Layers, Cpu } from 'lucide-react
 export const revalidate = 0;
 
 export default async function SuperAdminDataProcessingPage() {
-  const imports = await prisma.electoralRollImport.findMany({
-    include: {
-      campaign: true,
-      pages: true,
-    },
-    orderBy: { uploadedAt: 'desc' },
-  });
+  const [imports, totalProcessedRecords] = await Promise.all([
+    prisma.electoralRollImport.findMany({
+      include: {
+        campaign: true,
+        pages: true,
+      },
+      orderBy: { uploadedAt: 'desc' },
+    }),
+    prisma.importRecord.count(),
+  ]);
 
   return (
     <div className="flex min-h-screen bg-slate-50">
@@ -35,8 +38,8 @@ export default async function SuperAdminDataProcessingPage() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
             <StatCard title="Total Batches Processed" value={imports.length.toString()} subtitle="Electoral roll PDF jobs" icon={Database} iconColor="text-blue-600" iconBgColor="bg-blue-50" />
-            <StatCard title="Processed Records" value="1,24,580" subtitle="Extracted with provenance" icon={CheckCircle2} iconColor="text-emerald-600" iconBgColor="bg-emerald-50" badge={{ text: 'Completed', type: 'success' }} />
-            <StatCard title="Pipeline Status" value="Healthy" subtitle="Worker throughput 140 p/min" icon={Cpu} iconColor="text-purple-600" iconBgColor="bg-purple-50" />
+            <StatCard title="Processed Records" value={totalProcessedRecords.toLocaleString()} subtitle="Extracted with provenance" icon={CheckCircle2} iconColor="text-emerald-600" iconBgColor="bg-emerald-50" badge={{ text: totalProcessedRecords > 0 ? 'Completed' : 'Standby', type: totalProcessedRecords > 0 ? 'success' : 'info' }} />
+            <StatCard title="Pipeline Status" value="Healthy" subtitle="Worker throughput ready" icon={Cpu} iconColor="text-purple-600" iconBgColor="bg-purple-50" />
             <StatCard title="Source Snapshots" value="SHA-256" subtitle="Immutable document store" icon={Layers} iconColor="text-amber-600" iconBgColor="bg-amber-50" />
           </div>
 

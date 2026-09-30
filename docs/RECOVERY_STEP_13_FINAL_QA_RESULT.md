@@ -40,4 +40,4 @@
 
 ## 4. Known Environment Limitations & Production Notice
 1. **OCR Engine Requirement**: Native digital PDFs are extracted immediately via Poppler `pdftotext`. For legacy scanned image PDFs containing no digital text glyphs, production environments must provision Tesseract (`apt install tesseract-ocr`) or configure a cloud OCR pipeline. The system handles this gracefully by flagging batches as `ScannedPdfOcrRequired` rather than inventing data.
-2. **PostgreSQL Client Binaries**: Automated disaster recovery snapshots via `/api/v1/backups` require `pg_dump` and `pg_restore` binaries to be present in the host system's `$PATH`.
+2. **PostgreSQL Backup & Restore**: Automated disaster recovery snapshots via `/api/v1/admin/backups` run natively via Prisma structured JSON table export with SHA-256 verification and transactional restore drill into an isolated disposable database. `pg_dump` is supported as an optional CLI host optimization.
