@@ -13,7 +13,7 @@ export default async function SuperAdminCampaignsPage() {
     prisma.campaign.findMany({
       include: {
         organization: true,
-        _count: { select: { voters: true, households: true, issues: true } },
+        _count: { select: { voters: true, households: true, issues: true, wards: true, booths: true } },
       },
       orderBy: { createdAt: 'desc' },
     }),
@@ -65,11 +65,28 @@ export default async function SuperAdminCampaignsPage() {
               {campaigns.map((c) => (
                 <div key={c.id} className="py-4 flex items-center justify-between hover:bg-slate-50/50 p-2 rounded-lg transition">
                   <div>
-                    <h4 className="text-sm font-bold text-slate-900">{c.name}</h4>
-                    <p className="text-xs text-slate-500">
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-sm font-bold text-slate-900">{c.name}</h4>
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                          c.status === 'ACTIVE'
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            : c.status === 'SETUP'
+                            ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                            : 'bg-slate-100 text-slate-600 border border-slate-200'
+                        }`}
+                      >
+                        {c.status}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-0.5">
                       Org: {c.organization?.name} • Candidate: <strong>{c.candidateName}</strong> ({c.partyName})
                     </p>
                     <div className="flex items-center gap-3 text-[11px] text-slate-400 mt-1">
+                      <span>Wards: <strong>{c._count.wards}</strong></span>
+                      <span>•</span>
+                      <span>Booths: <strong>{c._count.booths}</strong></span>
+                      <span>•</span>
                       <span>Voters: <strong>{c._count.voters}</strong></span>
                       <span>•</span>
                       <span>Households: <strong>{c._count.households}</strong></span>
@@ -78,12 +95,22 @@ export default async function SuperAdminCampaignsPage() {
                     </div>
                   </div>
 
-                  <Link
-                    href={`/campaigns/${c.id}`}
-                    className="py-1.5 px-3 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-bold transition flex items-center gap-1"
-                  >
-                    Open Dashboard <ArrowRight className="w-3.5 h-3.5" />
-                  </Link>
+                  <div className="flex items-center gap-2">
+                    {(c.status === 'DRAFT' || c.status === 'SETUP') && (
+                      <Link
+                        href={`/campaigns/new?campaignId=${c.id}`}
+                        className="py-1.5 px-3 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 rounded-lg text-xs font-bold transition flex items-center gap-1 shadow-sm"
+                      >
+                        Resume Setup <ArrowRight className="w-3.5 h-3.5 text-amber-600" />
+                      </Link>
+                    )}
+                    <Link
+                      href={`/campaigns/${c.id}`}
+                      className="py-1.5 px-3 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-bold transition flex items-center gap-1"
+                    >
+                      Open Dashboard <ArrowRight className="w-3.5 h-3.5" />
+                    </Link>
+                  </div>
                 </div>
               ))}
             </div>

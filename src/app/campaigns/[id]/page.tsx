@@ -60,6 +60,28 @@ export default async function CampaignAdminDashboard({
         <TopHeader currentCampaignId={params.id} />
 
         <main className="flex-1 p-8 overflow-y-auto">
+          {/* Incomplete Campaign Setup Alert Banner */}
+          {campaign && (campaign.status === 'SETUP' || campaign.status === 'DRAFT') && (
+            <div className="bg-amber-50 border border-amber-300 rounded-xl p-5 mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <h3 className="text-sm font-bold text-amber-900">Campaign Setup Incomplete</h3>
+                  <p className="text-xs text-amber-700 mt-0.5">
+                    This campaign is currently in <strong>{campaign.status}</strong> mode. Electoral hierarchy, target margins, or final activation steps remain pending before full voter roll operations.
+                  </p>
+                </div>
+              </div>
+              <Link
+                href={`/campaigns/new?campaignId=${campaign.id}`}
+                className="py-2 px-4 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold shadow-md shadow-amber-500/20 transition flex items-center gap-1.5 whitespace-nowrap self-start sm:self-auto"
+              >
+                <span>Resume Setup Wizard</span>
+                <span className="text-amber-200">→</span>
+              </Link>
+            </div>
+          )}
+
           {/* Header Banner & Election Switcher */}
           <div className="bg-white rounded-xl border border-slate-200 p-6 mb-8 shadow-card flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>

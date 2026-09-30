@@ -1,15 +1,35 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { TopHeader } from '@/components/layout/TopHeader';
-import { Check, ArrowRight, User, AlertCircle, Plus, Trash2, Building, MapPin, Flag, Target, Shield } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import {
+  Check,
+  ArrowRight,
+  User,
+  AlertCircle,
+  Plus,
+  Trash2,
+  Building,
+  MapPin,
+  Flag,
+  Target,
+  Shield,
+  Edit2,
+  Save,
+  X,
+  RefreshCw,
+} from 'lucide-react';
+import { useRouter, useSearchParams } from 'next/navigation';
 
-export default function CreateCampaignPage() {
+function CreateCampaignWizard() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const paramCampaignId = searchParams.get('campaignId') || searchParams.get('id');
+
   const [step, setStep] = useState(1);
-  const [campaignId, setCampaignId] = useState<string | null>(null);
+  const [campaignId, setCampaignId] = useState<string | null>(paramCampaignId || null);
+  const [initialLoading, setInitialLoading] = useState(!!paramCampaignId);
 
   // Step 1: Basic Info
   const [campaignName, setCampaignName] = useState('Demo Assembly Campaign 2026');
@@ -32,8 +52,22 @@ export default function CreateCampaignPage() {
   const [localityType, setLocalityType] = useState('WARD'); // WARD or VILLAGE
 
   // Step 3: Configured Wards & Booths (Real records)
-  const [wards, setWards] = useState<{ id?: string; wardNumber: number; name: string; localityType?: string; booths?: any[] }[]>([]);
-  const [booths, setBooths] = useState<{ id?: string; wardId: string; boothNumber: number; name: string; areaLocality: string; pollingStation: string; totalElectors: number }[]>([]);
+  const [wards, setWards] = useState<{ id: string; wardNumber: number; name: string; localityType?: string; booths?: any[] }[]>([]);
+  const [booths, setBooths] = useState<{ id: string; wardId: string; boothNumber: number; name: string; areaLocality: string; pollingStation: string; totalElectors: number }[]>([]);
+
+  // Editing state for wards & booths
+  const [editingWardId, setEditingWardId] = useState<string | null>(null);
+  const [editingWardName, setEditingWardName] = useState('');
+  const [editingBoothId, setEditingBoothId] = useState<string | null>(null);
+  const [editingBoothName, setEditingBoothName] = useState('');
+  const [editingBoothStation, setEditingBoothStation] = useState('');
+  const [editingBoothLocality, setEditingBoothLocality] = useState('');
+  const [editingBoothElectors, setEditingBoothElectors] = useState<number>(0);
+  const [newBoothWardId, setNewBoothWardId] = useState<string | null>(null);
+  const [newBoothName, setNewBoothName] = useState('');
+  const [newBoothElectors, setNewBoothElectors] = useState('1000');
+  const [addingWard, setAddingWard] = useState(false);
+  const [newWardName, setNewWardName] = useState('');
 
   // Step 4: Voter Estimates & Campaign Targets / Safe Margin
   const [estimatedVoters, setEstimatedVoters] = useState('50000');
@@ -59,7 +93,7 @@ export default function CreateCampaignPage() {
     { value: 'GRAM_PANCHAYAT', label: 'Gram Panchayat (Sarpanch / Mukhiya / Ward Member - Tier 1)' },
     { value: 'CANTONMENT_BOARD', label: 'Cantonment Board Election (Civilian Urban Body)' },
     { value: 'COOPERATIVE_SOCIETY', label: 'Cooperative Society / Agricultural Board Election' },
-    { value: 'BYE_ELECTION', label: 'By-Election / Upachunav (Casual Vacancy Replacement)' }
+    { value: 'BYE_ELECTION', label: 'By-Election / Upachunav (Casual Vacancy Replacement)' },
   ];
 
   const steps = [
@@ -78,13 +112,15 @@ export default function CreateCampaignPage() {
         const json = await res.json();
         if (json.data && Array.isArray(json.data) && json.data.length > 0) {
           setPartiesList(json.data);
-          const ind = json.data.find((p: any) => p.name.toLowerCase().includes('independent'));
-          if (ind) {
-            setPoliticalParty(ind.name);
-            setIsIndependent(true);
-          } else {
-            setPoliticalParty(json.data[0].name);
-            setIsIndependent(false);
+          if (!paramCampaignId) {
+            const ind = json.data.find((p: any) => p.name.toLowerCase().includes('independent'));
+            if (ind) {
+              setPoliticalParty(ind.name);
+              setIsIndependent(true);
+            } else {
+              setPoliticalParty(json.data[0].name);
+              setIsIndependent(false);
+            }
           }
         }
       } catch (err) {
@@ -92,9 +128,94 @@ export default function CreateCampaignPage() {
       }
     }
     loadParties();
-  }, []);
+  }, [paramCampaignId]);
 
-  // Sync locality type conditional on election level
+  // Load existing campaign data if resuming
+  useEffect(() => {
+    if (!paramCampaignId) return;
+
+    async function loadExistingCampaign() {
+      setInitialLoading(true);
+      setError('');
+      try {
+        const res = await fetch(`/api/v1/campaigns/${paramCampaignId}`);
+        const json = await res.json();
+        if (!res.ok) {
+          throw new Error(json.error?.message || 'Failed to load existing campaign data');
+        }
+
+        const data = json.data;
+        setCampaignId(data.id);
+        if (data.name) setCampaignName(data.name);
+        if (data.partyName) {
+          setPoliticalParty(data.partyName);
+          setIsIndependent(data.partyName.toLowerCase().includes('independent'));
+        }
+        if (data.candidateName) setCandidateName(data.candidateName);
+        if (data.candidateCount) setCandidateCount(String(data.candidateCount));
+        if (data.electionLevel) setElectionLevel(data.electionLevel);
+        if (data.electionYear) setElectionYear(String(data.electionYear));
+        if (data.electionDate) setElectionDate(data.electionDate.substring(0, 10));
+        if (data.description) setDescription(data.description);
+        if (data.constituencyName) setConstituencyName(data.constituencyName);
+        if (data.stateName) setStateName(data.stateName);
+        if (data.districtName) setDistrictName(data.districtName);
+        if (data.declaredWards) setDeclaredWardsCount(String(data.declaredWards));
+        if (data.declaredVillages) setDeclaredVillagesCount(String(data.declaredVillages));
+
+        if (data.estimatedVoters !== undefined && data.estimatedVoters !== null) {
+          setEstimatedVoters(String(data.estimatedVoters));
+        }
+        if (data.targetVotes !== undefined && data.targetVotes !== null) {
+          setTargetVotes(String(data.targetVotes));
+        }
+        if (data.safeMarginVotes !== undefined && data.safeMarginVotes !== null) {
+          setSafeMarginVotes(String(data.safeMarginVotes));
+        }
+
+        const loadedWards = (data.wards || []).map((w: any) => ({
+          id: w.id,
+          wardNumber: w.wardNumber,
+          name: w.name,
+          localityType: w.localityType,
+        }));
+        setWards(loadedWards);
+
+        const loadedBooths = (data.booths || []).map((b: any) => ({
+          id: b.id,
+          wardId: b.wardId,
+          boothNumber: b.boothNumber,
+          name: b.name,
+          areaLocality: b.areaLocality || '',
+          pollingStation: b.pollingStation || '',
+          totalElectors: b.totalElectors || 0,
+        }));
+        setBooths(loadedBooths);
+
+        // Resume at the first incomplete step
+        if (!data.name || !data.candidateName) {
+          setStep(1);
+        } else if (!data.constituencyName) {
+          setStep(2);
+        } else if (loadedWards.length === 0 || loadedBooths.length === 0) {
+          setStep(3);
+        } else if (data.status === 'READY') {
+          setStep(5);
+        } else {
+          // If hierarchy is already configured, let user inspect/edit hierarchy or proceed to Step 4
+          setStep(3);
+        }
+      } catch (err: any) {
+        setError(err.message || 'Error fetching campaign details');
+      } finally {
+        setInitialLoading(false);
+      }
+    }
+
+    loadExistingCampaign();
+  }, [paramCampaignId]);
+
+  // Sync locality type conditional on election level (only if new or empty)
   useEffect(() => {
     if (['GRAM_PANCHAYAT', 'PANCHAYAT_SAMITI', 'ZILLA_PARISHAD'].includes(electionLevel)) {
       setLocalityType('VILLAGE');
@@ -110,6 +231,41 @@ export default function CreateCampaignPage() {
       setIsIndependent(true);
     } else {
       setIsIndependent(false);
+    }
+  };
+
+  // Refresh wards and booths from API
+  const refreshHierarchy = async (cId: string) => {
+    try {
+      const res = await fetch(`/api/v1/campaigns/${cId}`);
+      const json = await res.json();
+      if (res.ok && json.data) {
+        if (json.data.wards) {
+          setWards(
+            json.data.wards.map((w: any) => ({
+              id: w.id,
+              wardNumber: w.wardNumber,
+              name: w.name,
+              localityType: w.localityType,
+            }))
+          );
+        }
+        if (json.data.booths) {
+          setBooths(
+            json.data.booths.map((b: any) => ({
+              id: b.id,
+              wardId: b.wardId,
+              boothNumber: b.boothNumber,
+              name: b.name,
+              areaLocality: b.areaLocality || '',
+              pollingStation: b.pollingStation || '',
+              totalElectors: b.totalElectors || 0,
+            }))
+          );
+        }
+      }
+    } catch (err) {
+      console.error('Failed to refresh hierarchy:', err);
     }
   };
 
@@ -131,7 +287,7 @@ export default function CreateCampaignPage() {
         constituencyName: constituencyName.trim(),
         stateName: stateName.trim(),
         districtName: districtName.trim(),
-        declaredWards: Number(declaredWardsCount) || 0,
+        declaredWards: wards.length > 0 ? wards.length : Number(declaredWardsCount) || 0,
         declaredVillages: Number(declaredVillagesCount) || 0,
         declaredBooths: booths.length,
         estimatedVoters: Number(estimatedVoters) || 0,
@@ -153,7 +309,7 @@ export default function CreateCampaignPage() {
         setCampaignId(json.data.id);
         return json.data.id;
       } else {
-        // Update existing campaign instance
+        // Update existing campaign instance (Strict deduplication)
         const res = await fetch(`/api/v1/campaigns/${campaignId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -169,8 +325,9 @@ export default function CreateCampaignPage() {
     }
   };
 
-  // Scaffold default wards in DB
+  // Scaffold default wards in DB (Only when wards are 0)
   const handleScaffoldWards = async (activeCampId: string) => {
+    if (wards.length > 0) return;
     const count = Number(declaredWardsCount) || 5;
     try {
       const res = await fetch(`/api/v1/campaigns/${activeCampId}/wards`, {
@@ -184,7 +341,7 @@ export default function CreateCampaignPage() {
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error?.message || 'Failed to scaffold wards');
-      
+
       const newWards = json.data;
       setWards(newWards);
 
@@ -210,6 +367,138 @@ export default function CreateCampaignPage() {
       setBooths(newBoothsList);
     } catch (err: any) {
       setError(err.message || 'Error configuring geography');
+    }
+  };
+
+  // Hierarchy Management Actions (Step 3)
+  const handleSaveWardName = async (wardId: string) => {
+    if (!campaignId || !editingWardName.trim()) return;
+    try {
+      const res = await fetch(`/api/v1/campaigns/${campaignId}/wards/${wardId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: editingWardName.trim() }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error?.message || 'Failed to update ward name');
+      setWards((prev) => prev.map((w) => (w.id === wardId ? { ...w, name: editingWardName.trim() } : w)));
+      setEditingWardId(null);
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
+  const handleDeleteWard = async (wardId: string) => {
+    if (!campaignId) return;
+    try {
+      const res = await fetch(`/api/v1/campaigns/${campaignId}/wards/${wardId}`, {
+        method: 'DELETE',
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error?.message || 'Failed to delete ward');
+      setWards((prev) => prev.filter((w) => w.id !== wardId));
+      setBooths((prev) => prev.filter((b) => b.wardId !== wardId));
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
+  const handleAddNewWard = async () => {
+    if (!campaignId || !newWardName.trim()) return;
+    try {
+      const nextNum = wards.length > 0 ? Math.max(...wards.map((w) => w.wardNumber)) + 1 : 1;
+      const res = await fetch(`/api/v1/campaigns/${campaignId}/wards`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          wardNumber: nextNum,
+          name: newWardName.trim(),
+          localityType,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error?.message || 'Failed to create ward');
+      setWards((prev) => [...prev, json.data]);
+      setNewWardName('');
+      setAddingWard(false);
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
+  const handleSaveBooth = async (boothId: string) => {
+    if (!campaignId || !editingBoothName.trim()) return;
+    try {
+      const res = await fetch(`/api/v1/campaigns/${campaignId}/booths/${boothId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: editingBoothName.trim(),
+          pollingStation: editingBoothStation.trim(),
+          areaLocality: editingBoothLocality.trim(),
+          totalElectors: Number(editingBoothElectors) || 0,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error?.message || 'Failed to update booth');
+      setBooths((prev) =>
+        prev.map((b) =>
+          b.id === boothId
+            ? {
+                ...b,
+                name: editingBoothName.trim(),
+                pollingStation: editingBoothStation.trim(),
+                areaLocality: editingBoothLocality.trim(),
+                totalElectors: Number(editingBoothElectors) || 0,
+              }
+            : b
+        )
+      );
+      setEditingBoothId(null);
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
+  const handleDeleteBooth = async (boothId: string) => {
+    if (!campaignId) return;
+    try {
+      const res = await fetch(`/api/v1/campaigns/${campaignId}/booths/${boothId}`, {
+        method: 'DELETE',
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error?.message || 'Failed to delete booth');
+      setBooths((prev) => prev.filter((b) => b.id !== boothId));
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
+  const handleAddNewBooth = async (wardId: string) => {
+    if (!campaignId || !newBoothName.trim()) return;
+    try {
+      const targetWard = wards.find((w) => w.id === wardId);
+      const nextBoothNum = booths.length > 0 ? Math.max(...booths.map((b) => b.boothNumber)) + 1 : 1;
+      const res = await fetch(`/api/v1/campaigns/${campaignId}/booths`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          wardId,
+          boothNumber: nextBoothNum,
+          name: newBoothName.trim(),
+          areaLocality: `${targetWard?.name || 'Ward'} Area`,
+          pollingStation: `Govt School, ${newBoothName.trim()}`,
+          totalElectors: Number(newBoothElectors) || 0,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error?.message || 'Failed to create booth');
+      setBooths((prev) => [...prev, json.data]);
+      setNewBoothWardId(null);
+      setNewBoothName('');
+      setNewBoothElectors('1000');
+    } catch (err: any) {
+      setError(err.message);
     }
   };
 
@@ -242,7 +531,7 @@ export default function CreateCampaignPage() {
       }
       const cId = await persistDraft('SETUP');
       if (cId) {
-        // If wards are not yet created, scaffold them
+        // Only scaffold if wards are zero
         if (wards.length === 0) {
           await handleScaffoldWards(cId);
         }
@@ -315,6 +604,24 @@ export default function CreateCampaignPage() {
     }
   };
 
+  if (initialLoading) {
+    return (
+      <div className="flex min-h-screen bg-slate-50">
+        <Sidebar role="CAMPAIGN_ADMIN" />
+        <div className="flex-1 flex flex-col min-w-0">
+          <TopHeader />
+          <main className="flex-1 p-8 flex items-center justify-center">
+            <div className="bg-white p-8 rounded-xl border border-slate-200 shadow-sm text-center">
+              <RefreshCw className="w-8 h-8 text-blue-600 animate-spin mx-auto mb-3" />
+              <h3 className="text-sm font-bold text-slate-800">Loading Existing Campaign Configuration...</h3>
+              <p className="text-xs text-slate-500 mt-1">Fetching saved state from PostgreSQL database.</p>
+            </div>
+          </main>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-h-screen bg-slate-50">
       <Sidebar role="CAMPAIGN_ADMIN" />
@@ -326,20 +633,31 @@ export default function CreateCampaignPage() {
           {/* Header */}
           <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Provision Campaign</h1>
+              <div className="flex items-center gap-2">
+                <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+                  {paramCampaignId ? 'Resume Campaign Setup' : 'Provision Campaign'}
+                </h1>
+                {paramCampaignId && (
+                  <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-300">
+                    RESUMING EXISTING INSTANCE
+                  </span>
+                )}
+              </div>
               <p className="text-sm text-slate-500 mt-1">
                 Configure candidate, election level, constituency geography, wards, booths, and strategic safe margins.
               </p>
             </div>
             {campaignId && (
-              <button
-                type="button"
-                onClick={handleManualSaveDraft}
-                disabled={savingDraft}
-                className="py-2 px-4 border border-slate-300 text-slate-700 bg-white hover:bg-slate-50 rounded-lg text-xs font-semibold shadow-sm transition"
-              >
-                {savingDraft ? 'Saving Draft...' : 'Save Incomplete Draft'}
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleManualSaveDraft}
+                  disabled={savingDraft}
+                  className="py-2 px-4 border border-slate-300 text-slate-700 bg-white hover:bg-slate-50 rounded-lg text-xs font-semibold shadow-sm transition"
+                >
+                  {savingDraft ? 'Saving Draft...' : 'Save Incomplete Draft'}
+                </button>
+              </div>
             )}
           </div>
 
@@ -365,7 +683,12 @@ export default function CreateCampaignPage() {
 
               return (
                 <div key={s.number} className="flex items-center gap-2">
-                  <div
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (campaignId) setStep(s.number);
+                    }}
+                    disabled={!campaignId && s.number > step}
                     className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs transition-all ${
                       isActive
                         ? 'bg-blue-600 text-white shadow-md shadow-blue-500/30'
@@ -375,7 +698,7 @@ export default function CreateCampaignPage() {
                     }`}
                   >
                     {isDone ? <Check className="w-3.5 h-3.5" /> : s.number}
-                  </div>
+                  </button>
                   <span
                     className={`text-xs font-semibold hidden md:inline ${
                       isActive ? 'text-blue-600' : isDone ? 'text-slate-900' : 'text-slate-400'
@@ -627,7 +950,9 @@ export default function CreateCampaignPage() {
                       className="w-full p-2.5 border border-slate-300 rounded-lg bg-white text-slate-900 font-semibold text-sm"
                     />
                     <span className="text-[11px] text-slate-500 mt-1 block">
-                      The system will scaffold real database rows for these {localityType === 'VILLAGE' ? 'villages' : 'wards'} with customizable Part Booths.
+                      {wards.length > 0
+                        ? `This campaign already contains ${wards.length} persisted ${localityType === 'VILLAGE' ? 'villages' : 'wards'}.`
+                        : `The system will scaffold real database rows for these ${localityType === 'VILLAGE' ? 'villages' : 'wards'} with customizable Part Booths.`}
                     </span>
                   </div>
 
@@ -669,10 +994,10 @@ export default function CreateCampaignPage() {
             </div>
           )}
 
-          {/* Step 3: Wards & Polling Booths (Database Verified) */}
+          {/* Step 3: Wards & Polling Booths (Database Verified & Interactive Editing) */}
           {step === 3 && (
             <div className="bg-white rounded-xl border border-slate-200 p-8 shadow-card max-w-5xl space-y-6">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                   <h2 className="text-base font-bold text-slate-900">Configured Wards & Polling Booths</h2>
                   <p className="text-xs text-slate-500 mt-0.5">
@@ -686,40 +1011,288 @@ export default function CreateCampaignPage() {
                   <span className="px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 font-bold text-xs border border-emerald-200">
                     {booths.length} Polling Booths
                   </span>
+                  {campaignId && (
+                    <button
+                      type="button"
+                      onClick={() => setAddingWard(true)}
+                      className="py-1 px-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1 transition shadow-sm ml-2"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Add Ward
+                    </button>
+                  )}
                 </div>
               </div>
 
-              <div className="space-y-4 max-h-[420px] overflow-y-auto pr-2">
+              {/* Add Ward Modal / Inline Form */}
+              {addingWard && (
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex-1">
+                    <label className="block text-[11px] font-bold text-blue-900 uppercase mb-1">
+                      New Ward / Village Name
+                    </label>
+                    <input
+                      type="text"
+                      value={newWardName}
+                      onChange={(e) => setNewWardName(e.target.value)}
+                      placeholder={`e.g. ${localityType === 'VILLAGE' ? 'Village 3' : 'Ward 6'}`}
+                      className="w-full p-2 border border-blue-300 rounded-lg text-xs bg-white"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2 self-end sm:self-auto mt-2 sm:mt-4">
+                    <button
+                      type="button"
+                      onClick={handleAddNewWard}
+                      className="py-2 px-3 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 transition"
+                    >
+                      Save Ward
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAddingWard(false);
+                        setNewWardName('');
+                      }}
+                      className="py-2 px-3 border border-slate-300 bg-white text-slate-700 rounded-lg text-xs font-semibold hover:bg-slate-50 transition"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-4 max-h-[460px] overflow-y-auto pr-2">
                 {wards.map((w) => {
                   const wardBooths = booths.filter((b) => b.wardId === w.id);
+                  const isEditingThisWard = editingWardId === w.id;
+
                   return (
                     <div key={w.id || w.wardNumber} className="border border-slate-200 rounded-xl p-4 bg-slate-50">
                       <div className="flex items-center justify-between pb-3 border-b border-slate-200">
-                        <div className="flex items-center gap-2">
-                          <Building className="w-4 h-4 text-blue-600" />
-                          <span className="font-bold text-sm text-slate-900">{w.name}</span>
-                          <span className="text-xs text-slate-400 font-mono">(Part #{w.wardNumber})</span>
+                        <div className="flex items-center gap-2 flex-1">
+                          <Building className="w-4 h-4 text-blue-600 flex-shrink-0" />
+                          {isEditingThisWard ? (
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="text"
+                                value={editingWardName}
+                                onChange={(e) => setEditingWardName(e.target.value)}
+                                className="px-2 py-1 text-xs border border-blue-400 rounded bg-white font-bold text-slate-900"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => handleSaveWardName(w.id)}
+                                className="p-1 text-emerald-600 hover:text-emerald-800"
+                                title="Save ward name"
+                              >
+                                <Save className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditingWardId(null)}
+                                className="p-1 text-slate-400 hover:text-slate-600"
+                                title="Cancel"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ) : (
+                            <>
+                              <span className="font-bold text-sm text-slate-900">{w.name}</span>
+                              <span className="text-xs text-slate-400 font-mono">(Part #{w.wardNumber})</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingWardId(w.id);
+                                  setEditingWardName(w.name);
+                                }}
+                                className="p-1 text-slate-400 hover:text-blue-600 transition"
+                                title="Edit ward name"
+                              >
+                                <Edit2 className="w-3 h-3" />
+                              </button>
+                            </>
+                          )}
                         </div>
-                        <span className="text-xs font-semibold text-slate-500">
-                          {wardBooths.length} Booths
-                        </span>
+
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs font-semibold text-slate-500">
+                            {wardBooths.length} Booths
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setNewBoothWardId(w.id);
+                              setNewBoothName(`Booth ${booths.length + 1} - ${w.name}`);
+                            }}
+                            className="py-1 px-2 border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 rounded text-[11px] font-semibold flex items-center gap-1 transition"
+                          >
+                            <Plus className="w-3 h-3 text-blue-600" />
+                            Add Booth
+                          </button>
+                          {wardBooths.length === 0 && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteWard(w.id)}
+                              className="p-1 text-rose-500 hover:text-rose-700 transition"
+                              title="Delete empty ward"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
                       </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
-                        {wardBooths.map((b) => (
-                          <div key={b.id || b.boothNumber} className="bg-white p-3 rounded-lg border border-slate-200 text-xs">
-                            <div className="flex items-center justify-between font-bold text-slate-900">
-                              <span>Booth #{b.boothNumber}: {b.name}</span>
-                              <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-mono text-[10px]">
-                                {b.totalElectors} electors
-                              </span>
-                            </div>
-                            <div className="text-slate-500 text-[11px] mt-1 flex items-center gap-1">
-                              <MapPin className="w-3 h-3 text-slate-400 flex-shrink-0" />
-                              <span className="truncate">{b.pollingStation}</span>
+                      {/* Add Booth Inline Form */}
+                      {newBoothWardId === w.id && (
+                        <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 my-3">
+                          <div className="text-xs font-bold text-emerald-900 mb-2">
+                            Add New Polling Booth to {w.name}
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                            <input
+                              type="text"
+                              value={newBoothName}
+                              onChange={(e) => setNewBoothName(e.target.value)}
+                              placeholder="Booth Name"
+                              className="p-1.5 border border-emerald-300 rounded text-xs bg-white"
+                            />
+                            <input
+                              type="number"
+                              value={newBoothElectors}
+                              onChange={(e) => setNewBoothElectors(e.target.value)}
+                              placeholder="Total Electors"
+                              className="p-1.5 border border-emerald-300 rounded text-xs bg-white"
+                            />
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleAddNewBooth(w.id)}
+                                className="py-1 px-3 bg-emerald-600 text-white rounded text-xs font-bold hover:bg-emerald-700 transition"
+                              >
+                                Save Booth
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setNewBoothWardId(null)}
+                                className="py-1 px-3 border border-slate-300 bg-white text-slate-600 rounded text-xs hover:bg-slate-50 transition"
+                              >
+                                Cancel
+                              </button>
                             </div>
                           </div>
-                        ))}
+                        </div>
+                      )}
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+                        {wardBooths.map((b) => {
+                          const isEditingThisBooth = editingBoothId === b.id;
+
+                          if (isEditingThisBooth) {
+                            return (
+                              <div
+                                key={b.id || b.boothNumber}
+                                className="bg-white p-3 rounded-lg border-2 border-blue-400 text-xs space-y-2 shadow-sm"
+                              >
+                                <div>
+                                  <label className="block text-[10px] text-slate-500 font-bold uppercase">
+                                    Booth Name
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={editingBoothName}
+                                    onChange={(e) => setEditingBoothName(e.target.value)}
+                                    className="w-full p-1 border border-slate-300 rounded text-xs font-semibold"
+                                  />
+                                </div>
+                                <div className="grid grid-cols-2 gap-2">
+                                  <div>
+                                    <label className="block text-[10px] text-slate-500 font-bold uppercase">
+                                      Electors
+                                    </label>
+                                    <input
+                                      type="number"
+                                      value={editingBoothElectors}
+                                      onChange={(e) => setEditingBoothElectors(Number(e.target.value))}
+                                      className="w-full p-1 border border-slate-300 rounded text-xs font-mono"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="block text-[10px] text-slate-500 font-bold uppercase">
+                                      Polling Station
+                                    </label>
+                                    <input
+                                      type="text"
+                                      value={editingBoothStation}
+                                      onChange={(e) => setEditingBoothStation(e.target.value)}
+                                      className="w-full p-1 border border-slate-300 rounded text-xs"
+                                    />
+                                  </div>
+                                </div>
+                                <div className="flex items-center justify-end gap-2 pt-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSaveBooth(b.id)}
+                                    className="py-1 px-2.5 bg-blue-600 text-white rounded text-[11px] font-bold hover:bg-blue-700"
+                                  >
+                                    Save
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditingBoothId(null)}
+                                    className="py-1 px-2.5 border border-slate-300 bg-white text-slate-600 rounded text-[11px]"
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          }
+
+                          return (
+                            <div
+                              key={b.id || b.boothNumber}
+                              className="bg-white p-3 rounded-lg border border-slate-200 text-xs hover:border-slate-300 transition"
+                            >
+                              <div className="flex items-center justify-between font-bold text-slate-900">
+                                <span className="truncate pr-2">
+                                  Booth #{b.boothNumber}: {b.name}
+                                </span>
+                                <div className="flex items-center gap-1.5 flex-shrink-0">
+                                  <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-mono text-[10px]">
+                                    {b.totalElectors.toLocaleString()} electors
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setEditingBoothId(b.id);
+                                      setEditingBoothName(b.name);
+                                      setEditingBoothStation(b.pollingStation);
+                                      setEditingBoothLocality(b.areaLocality);
+                                      setEditingBoothElectors(b.totalElectors);
+                                    }}
+                                    className="p-1 text-slate-400 hover:text-blue-600"
+                                    title="Edit booth"
+                                  >
+                                    <Edit2 className="w-3 h-3" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteBooth(b.id)}
+                                    className="p-1 text-slate-300 hover:text-rose-600"
+                                    title="Delete booth"
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              </div>
+                              <div className="text-slate-500 text-[11px] mt-1 flex items-center gap-1">
+                                <MapPin className="w-3 h-3 text-slate-400 flex-shrink-0" />
+                                <span className="truncate">{b.pollingStation || 'Polling Station'}</span>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   );
@@ -903,5 +1476,19 @@ export default function CreateCampaignPage() {
         </main>
       </div>
     </div>
+  );
+}
+
+export default function CreateCampaignPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-slate-50 flex items-center justify-center p-8">
+          <div className="text-slate-500 text-xs font-semibold">Loading campaign wizard...</div>
+        </div>
+      }
+    >
+      <CreateCampaignWizard />
+    </Suspense>
   );
 }
