@@ -370,7 +370,23 @@ export default function ImportReviewCenterPage({ params }: { params: { id: strin
                         {r.relationName ? `${r.relationName} (${r.relationType || 'OTHER'})` : '—'}
                       </td>
                       <td className="py-3 px-4 text-slate-600">{r.houseNumber}</td>
-                      <td className="py-3 px-4 text-slate-600">{r.age} yrs / {r.gender}</td>
+                      <td className="py-3 px-4 text-slate-600">
+                        <div>
+                          <span>{r.age} yrs / {r.gender === 'F' ? 'Female (F)' : r.gender === 'M' ? 'Male (M)' : r.gender === 'O' ? 'Other (O)' : r.gender}</span>
+                          {r.validationErrors && (
+                            <div className="mt-1 text-[10px] text-rose-600 font-medium">
+                              {(() => {
+                                try {
+                                  const errs = JSON.parse(r.validationErrors);
+                                  return Array.isArray(errs) ? errs.join('; ') : String(r.validationErrors);
+                                } catch {
+                                  return String(r.validationErrors);
+                                }
+                              })()}
+                            </div>
+                          )}
+                        </div>
+                      </td>
                       <td className="py-3 px-4">
                         <span
                           className={`font-mono font-bold ${

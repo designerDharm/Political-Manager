@@ -106,8 +106,18 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Prevent publishing if any records in the batch are still INVALID or have unresolved validation errors
+    const invalidRecords = importJob.records.filter((r) => r.status === 'INVALID' && !r.reviewed && !r.corrected);
+    if (invalidRecords.length > 0) {
+      return apiError(
+        'VALIDATION_ERROR',
+        `Cannot publish import: ${invalidRecords.length} record(s) contain invalid or missing required values (e.g. invalid gender/name/EPIC). Please review and correct all invalid records in Review Center before publishing.`,
+        400
+      );
+    }
+
     // Read valid/publishable staged records
-    // Exclude invalid or unreviewed duplicate suspects if any
+    // Exclude unreviewed duplicate suspects if any
     const publishableRecords = importJob.records.filter(
       (r) => r.status === 'VALID' || r.reviewed || r.corrected
     );
@@ -129,6 +139,9 @@ export async function POST(req: NextRequest) {
         const recWardId = rec.wardId || targetWardId;
         const recBoothId = rec.boothId || targetBoothId;
 
+        // Ensure gender is valid enum M, F, or O
+        const genderVal = rec.gender === 'F' ? 'F' : rec.gender === 'O' ? 'O' : 'M';
+
         const voter = await tx.voter.upsert({
           where: { epicNumber: rec.epicNumber },
           update: {
@@ -141,7 +154,7 @@ export async function POST(req: NextRequest) {
             relationshipType: rec.relationType || 'OTHER',
             houseNumber: rec.houseNumber || '0',
             age: rec.age,
-            gender: rec.gender,
+            gender: genderVal,
             status: 'Processed',
             verificationStatus: 'VERIFIED',
           },
@@ -155,7 +168,7 @@ export async function POST(req: NextRequest) {
             relationshipType: rec.relationType || 'OTHER',
             houseNumber: rec.houseNumber || '0',
             age: rec.age,
-            gender: rec.gender,
+            gender: genderVal,
             epicNumber: rec.epicNumber,
             status: 'Processed',
             verificationStatus: 'VERIFIED',

@@ -24,6 +24,31 @@ export const ALL_SUPPORTED_COLUMNS = [
 ];
 
 /**
+ * Normalize and validate voter gender strictly and case-insensitively.
+ * Supported:
+ * M / MALE / पुरुष -> 'M'
+ * F / FEMALE / महिला / स्त्री -> 'F'
+ * O / OTHER / अन्य / तृतीय लिंग -> 'O'
+ * Returns null for blank, unknown, or unrecognized values (never defaults silently to 'M').
+ */
+export function normalizeGender(raw: string | undefined | null): 'M' | 'F' | 'O' | null {
+  if (!raw) return null;
+  const clean = raw.trim().toUpperCase();
+  if (!clean) return null;
+
+  if (clean === 'M' || clean === 'MALE' || clean === 'पुरुष') {
+    return 'M';
+  }
+  if (clean === 'F' || clean === 'FEMALE' || clean === 'महिला' || clean === 'स्त्री') {
+    return 'F';
+  }
+  if (clean === 'O' || clean === 'OTHER' || clean === 'OTHERS' || clean === 'T' || clean === 'TRANSGENDER' || clean === 'अन्य' || clean === 'तृतीय लिंग') {
+    return 'O';
+  }
+  return null;
+}
+
+/**
  * CSV / Tabular Parser Result
  */
 export interface TabularParseResult {
@@ -300,10 +325,9 @@ export function parseTabularVoterRows(
     else if (/MOTHER|माता/i.test(relationTypeRaw)) relationType = 'MOTHER';
     else if (relationName && !relationTypeRaw) relationType = 'FATHER'; // Default to father if name given
 
-    // Normalize Gender
-    let gender: 'M' | 'F' | 'O' = 'O';
-    if (/^M|MALE|पुरुष/i.test(genderRaw)) gender = 'M';
-    else if (/^F|FEMALE|महिला|स्त्री/i.test(genderRaw)) gender = 'F';
+    // Normalize Gender strictly: M/MALE -> M, F/FEMALE -> F, O/OTHER -> O
+    const normalizedGender = normalizeGender(genderRaw);
+    const gender: 'M' | 'F' | 'O' = normalizedGender || 'O';
 
     // Normalize Age
     const age = parseInt(ageRaw, 10) || 0;
@@ -325,6 +349,12 @@ export function parseTabularVoterRows(
       validationErrors.push(`Row ${r + 1}: Invalid age (${age}). Must be between 18 and 125`);
       if (status === 'VALID') status = 'LOW_CONFIDENCE';
     }
+    if (!normalizedGender) {
+      validationErrors.push(
+        `Row ${r + 1}: Invalid or missing gender "${genderRaw || '(blank)'}". Expected MALE (M), FEMALE (F), or OTHER (O).`
+      );
+      status = 'INVALID';
+    }
 
     if (epicRaw) {
       if (existingEpicsInDb.has(epicRaw)) {
@@ -340,7 +370,7 @@ export function parseTabularVoterRows(
     const nameConf = fullName.length >= 2 ? 1.0 : 0.4;
     const epicConf = /^[A-Z0-9_-]{5,20}$/.test(epicRaw) ? 1.0 : 0.5;
     const ageConf = age >= 18 && age <= 125 ? 1.0 : 0.5;
-    const genderConf = gender === 'M' || gender === 'F' ? 1.0 : 0.5;
+    const genderConf = normalizedGender ? 1.0 : 0.0;
     const rowConfidence = Number(((nameConf + epicConf + ageConf + genderConf) / 4).toFixed(3));
 
     voters.push({

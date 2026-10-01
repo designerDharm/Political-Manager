@@ -52,12 +52,25 @@ export async function PATCH(
     if (relationType !== undefined) updateData.relationType = String(relationType);
     if (houseNumber !== undefined) updateData.houseNumber = String(houseNumber).trim();
     if (age !== undefined) updateData.age = Number(age);
-    if (gender !== undefined) updateData.gender = String(gender);
     if (epicNumber !== undefined) updateData.epicNumber = String(epicNumber).trim().toUpperCase();
     if (status !== undefined) updateData.status = String(status);
 
+    if (gender !== undefined) {
+      const gStr = String(gender).trim();
+      const upper = gStr.toUpperCase();
+      let normalizedGender: 'M' | 'F' | 'O' | null = null;
+      if (upper === 'M' || upper === 'MALE' || upper === 'पुरुष') normalizedGender = 'M';
+      else if (upper === 'F' || upper === 'FEMALE' || upper === 'महिला' || upper === 'स्त्री') normalizedGender = 'F';
+      else if (upper === 'O' || upper === 'OTHER' || upper === 'OTHERS' || upper === 'TRANSGENDER') normalizedGender = 'O';
+
+      if (!normalizedGender) {
+        return apiError('VALIDATION_ERROR', `Invalid gender value "${gender}". Must be MALE (M), FEMALE (F), or OTHER (O).`, 400);
+      }
+      updateData.gender = normalizedGender;
+    }
+
     // If marked valid or fields were corrected, bump confidence
-    if (status === 'VALID' || updateData.fullName || updateData.epicNumber) {
+    if (status === 'VALID' || updateData.fullName || updateData.epicNumber || updateData.gender) {
       updateData.confidence = 0.99;
       updateData.validationErrors = null;
     }
