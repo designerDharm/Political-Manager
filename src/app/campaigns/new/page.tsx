@@ -607,9 +607,9 @@ function CreateCampaignWizard() {
   if (initialLoading) {
     return (
       <div className="flex min-h-screen bg-slate-50">
-        <Sidebar role="CAMPAIGN_ADMIN" />
+        <Sidebar role="CAMPAIGN_ADMIN" campaignId={campaignId || undefined} />
         <div className="flex-1 flex flex-col min-w-0">
-          <TopHeader />
+          <TopHeader currentCampaignId={campaignId || undefined} />
           <main className="flex-1 p-8 flex items-center justify-center">
             <div className="bg-white p-8 rounded-xl border border-slate-200 shadow-sm text-center">
               <RefreshCw className="w-8 h-8 text-blue-600 animate-spin mx-auto mb-3" />
@@ -624,10 +624,10 @@ function CreateCampaignWizard() {
 
   return (
     <div className="flex min-h-screen bg-slate-50">
-      <Sidebar role="CAMPAIGN_ADMIN" />
+      <Sidebar role="CAMPAIGN_ADMIN" campaignId={campaignId || undefined} />
 
       <div className="flex-1 flex flex-col min-w-0">
-        <TopHeader />
+        <TopHeader currentCampaignId={campaignId || undefined} />
 
         <main className="flex-1 p-8 overflow-y-auto">
           {/* Header */}

@@ -2,7 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { Logo } from '@/components/ui/Logo';
 import {
   LayoutDashboard,
@@ -30,8 +30,25 @@ interface SidebarProps {
   campaignId?: string;
 }
 
-export function Sidebar({ role, campaignId = 'sharma-assembly-2026' }: SidebarProps) {
+export function Sidebar({ role, campaignId: explicitCampaignId }: SidebarProps) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  // 1. Resolve active campaign context:
+  // Priority A: Explicit prop passed from route or parent
+  // Priority B: Query param on wizard / pages (?campaignId=... or ?id=...)
+  // Priority C: URL route param segment /campaigns/[id]/...
+  const queryCampaignId = searchParams?.get('campaignId') || searchParams?.get('id') || undefined;
+
+  let pathCampaignId: string | undefined = undefined;
+  if (pathname) {
+    const match = pathname.match(/^\/campaigns\/([^/]+)/);
+    if (match && match[1] && match[1] !== 'new') {
+      pathCampaignId = match[1];
+    }
+  }
+
+  const activeCampaignId = explicitCampaignId || queryCampaignId || pathCampaignId || undefined;
 
   const superAdminLinks = [
     { name: 'Dashboard', href: '/super-admin', icon: LayoutDashboard },
@@ -47,19 +64,70 @@ export function Sidebar({ role, campaignId = 'sharma-assembly-2026' }: SidebarPr
     { name: 'Settings', href: '/super-admin/settings', icon: Settings },
   ];
 
+  // Campaign-scoped links:
+  // When activeCampaignId is present, navigate to the specific campaign's subroutes.
+  // When no campaign is active/selected, route to the campaign directory selector.
   const campaignAdminLinks = [
-    { name: 'Dashboard', href: `/campaigns/${campaignId}`, icon: LayoutDashboard },
-    { name: 'Campaigns', href: `/campaigns/new`, icon: Megaphone },
-    { name: 'Candidates', href: `/campaigns/${campaignId}/candidates`, icon: UserCheck },
-    { name: 'Voter Data', href: `/campaigns/${campaignId}/voters`, icon: Users },
-    { name: 'Households', href: `/campaigns/${campaignId}/households`, icon: Home },
-    { name: 'Field Operations', href: `/campaigns/${campaignId}/field`, icon: MapPin },
-    { name: 'Analytics', href: `/campaigns/${campaignId}/analytics`, icon: BarChart3 },
-    { name: 'Election Day', href: `/campaigns/${campaignId}/election-day`, icon: CalendarCheck },
-    { name: 'Team Management', href: `/campaigns/${campaignId}/team`, icon: UsersRound },
-    { name: 'Issues & Follow-up', href: `/campaigns/${campaignId}/issues`, icon: AlertCircle },
-    { name: 'Reports', href: `/campaigns/${campaignId}/reports`, icon: FileSpreadsheet },
-    { name: 'Settings', href: `/campaigns/${campaignId}/settings`, icon: Settings },
+    {
+      name: 'Dashboard',
+      href: activeCampaignId ? `/campaigns/${activeCampaignId}` : '/super-admin/campaigns',
+      icon: LayoutDashboard,
+    },
+    {
+      name: 'Campaigns',
+      href: '/super-admin/campaigns',
+      icon: Megaphone,
+    },
+    {
+      name: 'Candidates',
+      href: activeCampaignId ? `/campaigns/${activeCampaignId}/candidates` : '/super-admin/campaigns',
+      icon: UserCheck,
+    },
+    {
+      name: 'Voter Data',
+      href: activeCampaignId ? `/campaigns/${activeCampaignId}/voters` : '/super-admin/campaigns',
+      icon: Users,
+    },
+    {
+      name: 'Households',
+      href: activeCampaignId ? `/campaigns/${activeCampaignId}/households` : '/super-admin/campaigns',
+      icon: Home,
+    },
+    {
+      name: 'Field Operations',
+      href: activeCampaignId ? `/campaigns/${activeCampaignId}/field` : '/super-admin/campaigns',
+      icon: MapPin,
+    },
+    {
+      name: 'Analytics',
+      href: activeCampaignId ? `/campaigns/${activeCampaignId}/analytics` : '/super-admin/campaigns',
+      icon: BarChart3,
+    },
+    {
+      name: 'Election Day',
+      href: activeCampaignId ? `/campaigns/${activeCampaignId}/election-day` : '/super-admin/campaigns',
+      icon: CalendarCheck,
+    },
+    {
+      name: 'Team Management',
+      href: activeCampaignId ? `/campaigns/${activeCampaignId}/team` : '/super-admin/campaigns',
+      icon: UsersRound,
+    },
+    {
+      name: 'Issues & Follow-up',
+      href: activeCampaignId ? `/campaigns/${activeCampaignId}/issues` : '/super-admin/campaigns',
+      icon: AlertCircle,
+    },
+    {
+      name: 'Reports',
+      href: activeCampaignId ? `/campaigns/${activeCampaignId}/reports` : '/super-admin/campaigns',
+      icon: FileSpreadsheet,
+    },
+    {
+      name: 'Settings',
+      href: activeCampaignId ? `/campaigns/${activeCampaignId}/settings` : '/super-admin/campaigns',
+      icon: Settings,
+    },
   ];
 
   const links = role === 'SUPER_ADMIN' ? superAdminLinks : campaignAdminLinks;
@@ -75,7 +143,14 @@ export function Sidebar({ role, campaignId = 'sharma-assembly-2026' }: SidebarPr
       <div className="flex-1 py-4 px-3 overflow-y-auto space-y-1">
         {links.map((item) => {
           const Icon = item.icon;
-          const isActive = pathname === item.href || (item.href !== '/super-admin' && item.href !== `/campaigns/${campaignId}` && pathname.startsWith(item.href));
+          const isExact = pathname === item.href;
+          const isSub =
+            item.href !== '/super-admin' &&
+            item.href !== '/super-admin/campaigns' &&
+            activeCampaignId &&
+            item.href !== `/campaigns/${activeCampaignId}` &&
+            pathname?.startsWith(item.href);
+          const isActive = isExact || isSub;
 
           return (
             <Link
@@ -117,7 +192,7 @@ export function Sidebar({ role, campaignId = 'sharma-assembly-2026' }: SidebarPr
             Super Admin
           </Link>
           <Link
-            href={`/campaigns/${campaignId}`}
+            href={activeCampaignId ? `/campaigns/${activeCampaignId}` : '/super-admin/campaigns'}
             className="flex-1 py-1.5 px-2 text-center rounded bg-slate-800/80 hover:bg-blue-600 hover:text-white transition text-[11px]"
           >
             Campaign

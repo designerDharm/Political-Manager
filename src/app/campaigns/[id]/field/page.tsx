@@ -43,7 +43,7 @@ export default async function FieldOperationsPage({ params }: { params: { id: st
       <Sidebar role="CAMPAIGN_ADMIN" campaignId={params.id} />
 
       <div className="flex-1 flex flex-col min-w-0">
-        <TopHeader />
+        <TopHeader currentCampaignId={params.id} />
 
         <FieldOperationsClient
           campaignId={params.id}

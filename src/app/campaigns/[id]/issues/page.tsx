@@ -48,7 +48,7 @@ export default async function IssueManagementPage({ params }: { params: { id: st
       <Sidebar role="CAMPAIGN_ADMIN" campaignId={params.id} />
 
       <div className="flex-1 flex flex-col min-w-0">
-        <TopHeader />
+        <TopHeader currentCampaignId={params.id} />
 
         <main className="flex-1 p-8 overflow-y-auto">
           {/* 4 Metric Cards directly sourced from database */}
