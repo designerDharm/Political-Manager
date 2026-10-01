@@ -63,52 +63,84 @@ export default function VoterUploadPage({ params }: { params: { id: string } }) 
     { number: 4, title: 'Complete' },
   ];
 
+  const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024; // 50MB advertised limit matching server
+
+  const validateFile = (file: File | null): string | null => {
+    if (!file) {
+      return 'Please select a file to import';
+    }
+    if (file.size === 0) {
+      return 'Selected file is empty (0 bytes). Please choose a valid file.';
+    }
+    if (file.size > MAX_FILE_SIZE_BYTES) {
+      return `File size exceeds the 50 MB limit (${(file.size / (1024 * 1024)).toFixed(1)} MB).`;
+    }
+    const lowerName = file.name.toLowerCase();
+    const hasValidExt = lowerName.endsWith('.pdf') || lowerName.endsWith('.csv') || lowerName.endsWith('.xlsx') || lowerName.endsWith('.xls');
+    if (!hasValidExt) {
+      return 'Unsupported file format. Please upload a valid PDF document (or CSV/Excel file).';
+    }
+    return null;
+  };
+
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       const file = e.target.files[0];
+      const validationError = validateFile(file);
+      if (validationError) {
+        setSelectedFile(null);
+        setError(validationError);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+        return;
+      }
       setSelectedFile(file);
-      processUpload(file);
+      setError('');
+    } else {
+      // Cancelled file chooser: retain existing file if already selected, or do nothing
+    }
+  };
+
+  const clearSelectedFile = () => {
+    setSelectedFile(null);
+    setError('');
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
     }
   };
 
   const processUpload = async (fileObj?: File) => {
     const file = fileObj || selectedFile;
+    const validationError = validateFile(file);
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+
+    if (!file) return;
+
     setLoading(true);
     setMessage('');
     setError('');
     setStep(2);
 
     try {
-      let res: Response;
-      if (file) {
-        const formData = new FormData();
-        formData.append('campaignId', params.id);
-        if (selectedWardId) formData.append('wardId', selectedWardId);
-        if (selectedBoothId) formData.append('boothId', selectedBoothId);
-        formData.append('file', file);
+      const formData = new FormData();
+      formData.append('campaignId', params.id);
+      if (selectedWardId) formData.append('wardId', selectedWardId);
+      if (selectedBoothId) formData.append('boothId', selectedBoothId);
+      formData.append('file', file);
 
-        res = await fetch('/api/v1/imports', {
-          method: 'POST',
-          body: formData,
-        });
-      } else {
-        res = await fetch('/api/v1/imports', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            campaignId: params.id,
-            wardId: selectedWardId || undefined,
-            boothId: selectedBoothId || undefined,
-          }),
-        });
-      }
+      const res = await fetch('/api/v1/imports', {
+        method: 'POST',
+        body: formData,
+      });
 
       const json = await res.json();
       if (!res.ok) {
-        throw new Error(json.error?.message || 'Failed to process electoral roll upload');
+        throw new Error(json.error?.message || json.message || 'Failed to process electoral roll upload');
       }
 
-      setMessage(`File "${json.data?.originalFilename || file?.name || 'Roll'}" uploaded and ${json.data?.extractedVotersCount || 0} voters extracted!`);
+      setMessage(`File "${json.data?.originalFilename || file.name || 'Roll'}" uploaded and ${json.data?.extractedVotersCount || 0} voters extracted!`);
       await fetchImports();
       setStep(3);
 
@@ -275,7 +307,7 @@ export default function VoterUploadPage({ params }: { params: { id: string } }) 
               </h3>
               <p className="text-xs text-slate-500 mb-6">Select or drop file to ingest</p>
 
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center justify-center gap-3">
                 <button
                   type="button"
                   onClick={(e) => {
@@ -312,8 +344,35 @@ export default function VoterUploadPage({ params }: { params: { id: string } }) 
                 </button>
               </div>
 
+              {/* Status or error indication beside/under uploader buttons */}
+              {selectedFile ? (
+                <div 
+                  onClick={(e) => e.stopPropagation()} 
+                  className="mt-4 flex items-center gap-2 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-900 font-medium"
+                >
+                  <FileText className="w-4 h-4 text-blue-600" />
+                  <span>{selectedFile.name} ({(selectedFile.size / (1024 * 1024)).toFixed(2)} MB)</span>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      clearSelectedFile();
+                    }}
+                    title="Remove selected file"
+                    className="ml-2 text-slate-400 hover:text-rose-600 p-0.5 rounded transition"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ) : error === 'Please select a file to import' ? (
+                <div className="mt-3 flex items-center gap-1.5 text-xs font-semibold text-rose-600 animate-pulse">
+                  <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                  <span>Please select a file to import</span>
+                </div>
+              ) : null}
+
               <p className="text-[11px] text-slate-400 mt-4 pointer-events-none">
-                Supported formats: PDF, Scanned PDF, CSV, XLSX. Max size: 100MB.
+                Supported formats: PDF, Scanned PDF, CSV, XLSX. Max size: 50MB.
               </p>
             </div>
 

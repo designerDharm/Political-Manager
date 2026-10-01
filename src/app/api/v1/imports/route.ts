@@ -78,7 +78,7 @@ export async function POST(req: NextRequest) {
 
       const file = formData.get('file') as File | null;
       if (!file) {
-        return apiError('VALIDATION_ERROR', 'PDF file is required in multipart form', 400);
+        return apiError('VALIDATION_ERROR', 'Please select a file to import. A valid PDF file is required.', 400);
       }
 
       filename = file.name;
@@ -86,27 +86,18 @@ export async function POST(req: NextRequest) {
       const arrayBuffer = await file.arrayBuffer();
       fileBuffer = Buffer.from(arrayBuffer);
     } else {
-      // JSON payload fallback
-      const body = await req.json();
+      // JSON payload
+      const body = await req.json().catch(() => ({}));
       campaignId = body.campaignId;
       wardId = body.wardId || null;
       boothId = body.boothId || null;
-      filename = body.filename || 'Ward_Electoral_Roll.pdf';
-      fileSizeStr = body.fileSize || '1.0 MB';
+      filename = body.filename || '';
+      fileSizeStr = body.fileSize || '';
 
-      // If sample or existing path provided
       if (body.filePath && fs.existsSync(body.filePath)) {
         fileBuffer = fs.readFileSync(body.filePath);
       } else {
-        // Fallback to sample electoral roll if available
-        const defaultPdf = path.join(process.cwd(), 'UI:UX screens/KITHANA-Ward No-001.pdf');
-        if (fs.existsSync(defaultPdf)) {
-          fileBuffer = fs.readFileSync(defaultPdf);
-          filename = 'KITHANA-Ward No-001.pdf';
-          fileSizeStr = `${(fileBuffer.length / (1024 * 1024)).toFixed(2)} MB`;
-        } else {
-          return apiError('VALIDATION_ERROR', 'File buffer could not be resolved', 400);
-        }
+        return apiError('VALIDATION_ERROR', 'Please select a file to import. No file was provided.', 400);
       }
     }
 
