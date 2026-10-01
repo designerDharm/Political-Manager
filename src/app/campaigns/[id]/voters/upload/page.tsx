@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { TopHeader } from '@/components/layout/TopHeader';
-import { Upload, FileText, Check, Clock, Trash2, RotateCw, ArrowRight, AlertCircle } from 'lucide-react';
+import { Upload, FileText, Check, Clock, Trash2, RotateCw, ArrowRight, AlertCircle, Download, FileSpreadsheet } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
@@ -374,6 +374,58 @@ export default function VoterUploadPage({ params }: { params: { id: string } }) 
               <p className="text-[11px] text-slate-400 mt-4 pointer-events-none">
                 Supported formats: PDF, Scanned PDF, CSV, XLSX. Max size: 50MB.
               </p>
+            </div>
+
+            {/* CSV / Excel Column Guide & Downloadable Template */}
+            <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 flex items-center justify-center">
+                    <FileSpreadsheet className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-slate-900">CSV & Excel Import Specifications</h4>
+                    <p className="text-xs text-slate-500">Upload structured voter records directly with column validation</p>
+                  </div>
+                </div>
+
+                <a
+                  href="/api/v1/imports/template"
+                  download="voter_roll_template.csv"
+                  className="inline-flex items-center gap-2 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm transition"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Download Sample CSV Template</span>
+                </a>
+              </div>
+
+              <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
+                  <div className="font-bold text-slate-800 mb-1 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-rose-500"></span>
+                    <span>Required Columns (Header Row 1):</span>
+                  </div>
+                  <ul className="space-y-1 text-slate-600 pl-3.5 list-disc">
+                    <li><strong className="text-slate-900">EPIC Number</strong> (or <code>Voter ID</code>, <code>पहचान पत्र</code>)</li>
+                    <li><strong className="text-slate-900">Full Name</strong> (or <code>Name</code>, <code>नाम</code>)</li>
+                    <li><strong className="text-slate-900">Age</strong> (or <code>आयु</code>, <code>उम्र</code>, integer 18–125)</li>
+                    <li><strong className="text-slate-900">Gender</strong> (or <code>Sex</code>, <code>लिंग</code>: M/F/O)</li>
+                  </ul>
+                </div>
+
+                <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
+                  <div className="font-bold text-slate-800 mb-1 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                    <span>Optional Enriched Columns:</span>
+                  </div>
+                  <ul className="space-y-1 text-slate-600 pl-3.5 list-disc">
+                    <li><strong className="text-slate-900">Serial Number</strong> (or <code>Sr No</code>, <code>क्रमांक</code>)</li>
+                    <li><strong className="text-slate-900">Relation Name</strong> (or <code>Father Name</code>, <code>पिता/पति का नाम</code>)</li>
+                    <li><strong className="text-slate-900">Relation Type</strong> (FATHER / HUSBAND / MOTHER / OTHER)</li>
+                    <li><strong className="text-slate-900">House Number</strong> (or <code>मकान संख्या</code>)</li>
+                  </ul>
+                </div>
+              </div>
             </div>
 
             {/* Ingestion Jobs List */}

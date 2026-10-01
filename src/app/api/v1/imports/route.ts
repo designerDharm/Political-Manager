@@ -3,7 +3,8 @@ import { prisma } from '@/lib/prisma';
 import { apiSuccess, apiError } from '@/lib/api/response';
 import { requireAuth, requireCampaignAccess } from '@/lib/auth';
 import { extractTextFromPdf } from '@/lib/ocr/provider';
-import { parseElectoralRollPages } from '@/lib/ocr/electoralRollParser';
+import { parseElectoralRollPages, ParseRollResult } from '@/lib/ocr/electoralRollParser';
+import { parseCsvRows, parseXlsxRows, parseTabularVoterRows } from '@/lib/ocr/tabularParser';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
@@ -50,7 +51,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// POST /api/v1/imports - Multipart PDF upload, OCR text extraction, structured parsing & staging
+// POST /api/v1/imports - Multipart file upload (PDF, CSV, XLSX), extraction, structured parsing & staging
 export async function POST(req: NextRequest) {
   try {
     const authResult = await requireAuth(req);
@@ -78,7 +79,7 @@ export async function POST(req: NextRequest) {
 
       const file = formData.get('file') as File | null;
       if (!file) {
-        return apiError('VALIDATION_ERROR', 'Please select a file to import. A valid PDF file is required.', 400);
+        return apiError('VALIDATION_ERROR', 'Please select a file to import. A valid file is required.', 400);
       }
 
       filename = file.name;
@@ -120,15 +121,27 @@ export async function POST(req: NextRequest) {
       return apiError('VALIDATION_ERROR', 'Uploaded file buffer is empty', 400);
     }
 
-    const MAX_PDF_SIZE_BYTES = 50 * 1024 * 1024; // 50 MB
-    if (fileBuffer.length > MAX_PDF_SIZE_BYTES) {
+    const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024; // 50 MB
+    if (fileBuffer.length > MAX_FILE_SIZE_BYTES) {
       return apiError('VALIDATION_ERROR', 'File size exceeds maximum permitted limit of 50 MB', 413);
     }
 
-    // PDF Magic Bytes Validation: first 4 bytes must be "%PDF"
-    const magicBytes = fileBuffer.subarray(0, 4).toString('ascii');
-    if (!magicBytes.startsWith('%PDF')) {
-      return apiError('VALIDATION_ERROR', 'Invalid file type: File must be a valid PDF document with %PDF header', 415);
+    // Detect file format from extension and magic bytes
+    const lowerFilename = filename.toLowerCase();
+    const isCsv = lowerFilename.endsWith('.csv');
+    const isXlsx = lowerFilename.endsWith('.xlsx') || lowerFilename.endsWith('.xls');
+    const isPdf = lowerFilename.endsWith('.pdf') || fileBuffer.subarray(0, 4).toString('ascii').startsWith('%PDF');
+
+    if (!isPdf && !isCsv && !isXlsx) {
+      return apiError('VALIDATION_ERROR', 'Invalid file type: Supported formats are PDF (.pdf), CSV (.csv), and Excel (.xlsx, .xls)', 415);
+    }
+
+    // PDF Magic Bytes Validation: Apply %PDF check strictly to PDF files only
+    if (isPdf) {
+      const magicBytes = fileBuffer.subarray(0, 4).toString('ascii');
+      if (!magicBytes.startsWith('%PDF')) {
+        return apiError('VALIDATION_ERROR', 'Invalid file type: File must be a valid PDF document with %PDF header', 415);
+      }
     }
 
     // Ensure uploads directory exists (outside public root)
@@ -143,32 +156,87 @@ export async function POST(req: NextRequest) {
 
     fs.writeFileSync(destinationPath, fileBuffer);
 
-    // 1. Run real text extraction via OCR / Poppler engine
-    const ocrResult = await extractTextFromPdf(destinationPath);
-
-    // 2. Fetch existing EPIC numbers in database to detect duplicate voters
+    // Fetch existing EPIC numbers in database to detect duplicate voters
     const existingVoters = await prisma.voter.findMany({
       where: { campaignId },
       select: { epicNumber: true },
     });
     const existingEpicSet = new Set<string>(existingVoters.map((v) => v.epicNumber));
 
-    // 3. Run structured parsing of electoral roll pages
-    const parseResult = parseElectoralRollPages(ocrResult.pages, existingEpicSet);
-
-    // 4. Determine pipeline status based on extraction results
+    let parseResult: ParseRollResult;
+    let pagesToCreate: { pageNumber: number; ocrStatus: string; confidence: number; rawText: string }[] = [];
     let initialStatus = 'ReadyToPublish';
-    const totalChars = ocrResult.pages.reduce((acc, p) => acc + p.text.trim().length, 0);
 
-    if (parseResult.totalExtracted === 0 || totalChars < 50) {
-      initialStatus = 'ScannedPdfOcrRequired';
-    } else if (parseResult.lowConfidenceCount > 0) {
-      initialStatus = 'LowConfidenceReview';
-    } else if (parseResult.duplicateCount > 0) {
-      initialStatus = 'DuplicateReview';
+    if (isCsv) {
+      // 1A. CSV Parsing
+      const csvContent = fileBuffer.toString('utf8');
+      const rows = parseCsvRows(csvContent);
+      const tabularResult = parseTabularVoterRows(rows, existingEpicSet);
+
+      if (!tabularResult.success || !tabularResult.parseResult) {
+        return apiError('VALIDATION_ERROR', tabularResult.error || 'Failed to parse CSV electoral roll records.', 400);
+      }
+
+      parseResult = tabularResult.parseResult;
+      pagesToCreate = [
+        {
+          pageNumber: 1,
+          ocrStatus: 'Completed',
+          confidence: 1.0,
+          rawText: `CSV Import: ${rows.length} rows processed`,
+        },
+      ];
+    } else if (isXlsx) {
+      // 1B. XLSX Parsing
+      let rows: string[][];
+      try {
+        rows = parseXlsxRows(fileBuffer);
+      } catch (err: any) {
+        return apiError('VALIDATION_ERROR', `Failed to read XLSX file: ${err.message || 'Corrupted or unsupported format'}`, 400);
+      }
+
+      const tabularResult = parseTabularVoterRows(rows, existingEpicSet);
+      if (!tabularResult.success || !tabularResult.parseResult) {
+        return apiError('VALIDATION_ERROR', tabularResult.error || 'Failed to parse XLSX electoral roll records.', 400);
+      }
+
+      parseResult = tabularResult.parseResult;
+      pagesToCreate = [
+        {
+          pageNumber: 1,
+          ocrStatus: 'Completed',
+          confidence: 1.0,
+          rawText: `XLSX Import: ${rows.length} rows processed`,
+        },
+      ];
+    } else {
+      // 1C. PDF Parsing & OCR
+      const ocrResult = await extractTextFromPdf(destinationPath);
+      parseResult = parseElectoralRollPages(ocrResult.pages, existingEpicSet);
+
+      const totalChars = ocrResult.pages.reduce((acc, p) => acc + p.text.trim().length, 0);
+      if (parseResult.totalExtracted === 0 || totalChars < 50) {
+        initialStatus = 'ScannedPdfOcrRequired';
+      }
+
+      pagesToCreate = ocrResult.pages.map((p) => ({
+        pageNumber: p.pageNumber,
+        ocrStatus: 'Completed',
+        confidence: p.confidence,
+        rawText: p.text.slice(0, 10000),
+      }));
     }
 
-    // 5. Transactionally create ElectoralRollImport, ImportPages, and staged ImportRecords
+    // Determine initial status for review center
+    if (initialStatus !== 'ScannedPdfOcrRequired') {
+      if (parseResult.lowConfidenceCount > 0) {
+        initialStatus = 'LowConfidenceReview';
+      } else if (parseResult.duplicateCount > 0) {
+        initialStatus = 'DuplicateReview';
+      }
+    }
+
+    // Transactionally create ElectoralRollImport, ImportPages, and staged ImportRecords
     const importJob = await prisma.$transaction(async (tx) => {
       const job = await tx.electoralRollImport.create({
         data: {
@@ -186,12 +254,7 @@ export async function POST(req: NextRequest) {
           lowConfidenceCount: parseResult.lowConfidenceCount,
           duplicateCount: parseResult.duplicateCount,
           pages: {
-            create: ocrResult.pages.map((p) => ({
-              pageNumber: p.pageNumber,
-              ocrStatus: 'Completed',
-              confidence: p.confidence,
-              rawText: p.text.slice(0, 10000), // preserve raw text snippet
-            })),
+            create: pagesToCreate,
           },
         },
       });
@@ -233,6 +296,7 @@ export async function POST(req: NextRequest) {
           details: JSON.stringify({
             campaignId: campaign.id,
             originalFilename: filename,
+            format: isCsv ? 'CSV' : isXlsx ? 'XLSX' : 'PDF',
             totalExtracted: parseResult.totalExtracted,
             confidenceAvg: parseResult.confidenceAvg,
             lowConfidenceCount: parseResult.lowConfidenceCount,
