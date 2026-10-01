@@ -39,12 +39,18 @@ export async function GET(
       return apiError('NOT_FOUND', 'Source electoral roll PDF not found on disk', 404);
     }
 
-    // Path traversal defense: confirm file is strictly within uploads/imports or project root
+    // Path traversal defense: confirm file is strictly within managed uploads or project root
     const normalizedPath = path.resolve(importJob.filePath);
-    const uploadsDir = path.resolve(process.cwd(), 'uploads', 'imports');
+    const localUploadsDir = path.resolve(process.cwd(), 'uploads', 'imports');
+    const tmpUploadsDir = path.resolve('/tmp', 'uploads', 'imports');
     const projectDir = path.resolve(process.cwd());
 
-    if (!normalizedPath.startsWith(uploadsDir) && !normalizedPath.startsWith(projectDir)) {
+    const isAllowedPath =
+      normalizedPath.startsWith(localUploadsDir) ||
+      normalizedPath.startsWith(tmpUploadsDir) ||
+      normalizedPath.startsWith(projectDir);
+
+    if (!isAllowedPath) {
       return apiError('FORBIDDEN', 'Access to source path outside managed storage is forbidden', 403);
     }
 

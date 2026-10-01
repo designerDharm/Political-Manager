@@ -144,8 +144,12 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Ensure uploads directory exists (outside public root)
-    const uploadsDir = path.join(process.cwd(), 'uploads', 'imports');
+    // Ensure uploads directory exists (using /tmp on serverless environments like Vercel)
+    const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+    const uploadsDir = isServerless
+      ? path.join('/tmp', 'uploads', 'imports')
+      : path.join(process.cwd(), 'uploads', 'imports');
+
     if (!fs.existsSync(uploadsDir)) {
       fs.mkdirSync(uploadsDir, { recursive: true });
     }
