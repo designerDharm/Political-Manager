@@ -82,13 +82,15 @@ export async function POST(req: NextRequest) {
       };
       explanation = 'Retrieved aggregate polling turnout progression reported by authorized agents across booths.';
     } else if (lowerPrompt.includes('household') || lowerPrompt.includes('visit') || lowerPrompt.includes('coverage')) {
-      const [totalHouseholds, visitedInteractions, verifiedHouseholds] = await Promise.all([
+      const [totalHouseholds, distinctVisitedInteractions, verifiedHouseholds] = await Promise.all([
         prisma.household.count(campaignId ? { where: { campaignId } } : undefined),
-        prisma.interaction.count({
+        prisma.interaction.findMany({
           where: {
-            status: { in: ['CONTACTED', 'VERIFIED', 'COMPLETED'] },
+            ...(campaignId ? { campaignId } : {}),
             householdId: { not: null },
           },
+          distinct: ['householdId'],
+          select: { householdId: true },
         }),
         prisma.household.count({
           where: {
@@ -98,8 +100,8 @@ export async function POST(req: NextRequest) {
         }),
       ]);
 
-      const visitedHouseholds = Math.min(visitedInteractions, totalHouseholds);
-      const coverageRate = totalHouseholds > 0 ? ((visitedHouseholds / totalHouseholds) * 100).toFixed(1) : '0.0';
+      const visitedHouseholds = Math.min(distinctVisitedInteractions.length, totalHouseholds);
+      const coverageRate = totalHouseholds > 0 ? ((visitedHouseholds / totalHouseholds) * 100).toFixed(0) : '0';
 
       intentResult = {
         metric: 'HOUSEHOLD_COVERAGE',

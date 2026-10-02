@@ -73,21 +73,27 @@ export async function GET(
       },
     });
 
-    // Compute verified households per booth for accurate coverage
-    const verifiedCounts = await prisma.household.groupBy({
-      by: ['boothId'],
+    // Compute distinct visited households per booth for accurate coverage from persisted field interactions
+    const visitedInteractions = await prisma.interaction.findMany({
       where: {
         campaignId,
-        boothId: { in: booths.map((b) => b.id) },
-        status: 'Verified',
+        householdId: { not: null },
+        household: {
+          boothId: { in: booths.map((b) => b.id) },
+        },
       },
-      _count: { id: true },
+      distinct: ['householdId'],
+      select: {
+        householdId: true,
+        household: { select: { boothId: true } },
+      },
     });
 
     const verifiedMap = new Map<string, number>();
-    for (const v of verifiedCounts) {
-      if (v.boothId) {
-        verifiedMap.set(v.boothId, v._count.id);
+    for (const item of visitedInteractions) {
+      const bId = item.household?.boothId;
+      if (bId) {
+        verifiedMap.set(bId, (verifiedMap.get(bId) || 0) + 1);
       }
     }
 

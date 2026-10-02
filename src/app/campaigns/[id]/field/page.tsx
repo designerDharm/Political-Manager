@@ -2,12 +2,13 @@ import React from 'react';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { TopHeader } from '@/components/layout/TopHeader';
 import { prisma } from '@/lib/prisma';
+import { getCampaignOperationalMetrics } from '@/lib/analytics/metrics';
 import { FieldOperationsClient } from '@/components/field/FieldOperationsClient';
 
 export const revalidate = 0;
 
 export default async function FieldOperationsPage({ params }: { params: { id: string } }) {
-  const [households, booths, tasks, totalHouseholds, verifiedCount] = await Promise.all([
+  const [households, rawBooths, tasks, metrics] = await Promise.all([
     prisma.household.findMany({
       where: { campaignId: params.id },
       take: 20,
@@ -34,9 +35,18 @@ export default async function FieldOperationsPage({ params }: { params: { id: st
       orderBy: { createdAt: 'desc' },
       take: 10,
     }),
-    prisma.household.count({ where: { campaignId: params.id } }),
-    prisma.household.count({ where: { campaignId: params.id, status: 'Verified' } }),
+    getCampaignOperationalMetrics(params.id),
   ]);
+
+  const boothVisitedMap = new Map<string, number>();
+  for (const b of metrics.voters.boothDistribution) {
+    boothVisitedMap.set(b.boothId, b.visitedHouseholds);
+  }
+
+  const booths = rawBooths.map((b) => ({
+    ...b,
+    visitedCount: boothVisitedMap.get(b.id) || 0,
+  }));
 
   return (
     <div className="flex min-h-screen bg-slate-50">
@@ -47,8 +57,8 @@ export default async function FieldOperationsPage({ params }: { params: { id: st
 
         <FieldOperationsClient
           campaignId={params.id}
-          initialTotalHouseholds={totalHouseholds}
-          initialVerifiedCount={verifiedCount}
+          initialTotalHouseholds={metrics.households.total}
+          initialVerifiedCount={metrics.households.visited}
           initialBooths={booths}
           initialTasks={tasks}
         />

@@ -2,25 +2,22 @@ import React from 'react';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { TopHeader } from '@/components/layout/TopHeader';
 import { prisma } from '@/lib/prisma';
+import { getCampaignOperationalMetrics } from '@/lib/analytics/metrics';
 import { ReportsClient } from '@/components/campaign/ReportsClient';
 
 export const revalidate = 0;
 
 export default async function ReportsPage({ params }: { params: { id: string } }) {
   const [
-    totalVoters,
-    totalHouseholds,
+    metrics,
     totalVisIssued,
-    totalIssues,
     totalTurnoutSnapshots,
     totalExportsRecorded,
     wards,
     booths,
   ] = await Promise.all([
-    prisma.voter.count({ where: { campaignId: params.id } }),
-    prisma.household.count({ where: { campaignId: params.id } }),
+    getCampaignOperationalMetrics(params.id),
     prisma.visEvent.count({ where: { campaignId: params.id, eventType: { in: ['ISSUED', 'REPRINTED'] } } }),
-    prisma.issue.count({ where: { campaignId: params.id } }),
     prisma.turnoutSnapshot.count({ where: { campaignId: params.id } }),
     prisma.auditEvent.count({ where: { campaignId: params.id, action: 'REPORT_EXPORTED' } }),
     prisma.ward.findMany({
@@ -59,10 +56,13 @@ export default async function ReportsPage({ params }: { params: { id: string } }
           <ReportsClient
             campaignId={params.id}
             initialCounts={{
-              totalVoters,
-              totalHouseholds,
+              totalVoters: metrics.voters.total,
+              totalHouseholds: metrics.households.total,
+              visitedHouseholds: metrics.households.visited,
+              pendingHouseholds: metrics.households.pending,
+              coveragePercentage: metrics.households.coveragePercentage,
               totalVisIssued,
-              totalIssues,
+              totalIssues: metrics.issues.total,
               totalTurnoutSnapshots,
               totalExportsRecorded,
             }}

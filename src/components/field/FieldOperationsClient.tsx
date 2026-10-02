@@ -46,29 +46,37 @@ export function FieldOperationsClient({
   const fetchAuthoritativeData = useCallback(async () => {
     setIsRefreshing(true);
     try {
-      const [campRes, tasksRes] = await Promise.all([
+      const [analyticsRes, campRes, tasksRes] = await Promise.all([
+        fetch(`/api/v1/analytics?campaignId=${campaignId}`),
         fetch(`/api/v1/campaigns/${campaignId}`),
         fetch(`/api/v1/tasks?campaignId=${campaignId}`),
       ]);
 
+      const analyticsJson = await analyticsRes.json();
       const campJson = await campRes.json();
       const tasksJson = await tasksRes.json();
 
-      if (campJson.data) {
-        const camp = campJson.data;
-        if (camp._count) {
-          setTotalHouseholds(camp._count.households || 0);
+      let boothVisitedMap = new Map<string, number>();
+
+      if (analyticsJson.data) {
+        const metrics = analyticsJson.data;
+        if (metrics.households) {
+          setTotalHouseholds(metrics.households.total || 0);
+          setVerifiedCount(metrics.households.visited || 0);
         }
-        if (camp.booths) {
-          setBooths(camp.booths);
+        if (metrics.voters?.boothDistribution) {
+          for (const b of metrics.voters.boothDistribution) {
+            boothVisitedMap.set(b.boothId, b.visitedHouseholds);
+          }
         }
       }
 
-      // Also get verified household count
-      const hhRes = await fetch(`/api/v1/households?campaignId=${campaignId}&limit=1`);
-      const hhJson = await hhRes.json();
-      if (hhJson.meta) {
-        setVerifiedCount(hhJson.meta.confirmedCount || 0);
+      if (campJson.data?.booths) {
+        const updatedBooths = campJson.data.booths.map((b: any) => ({
+          ...b,
+          visitedCount: boothVisitedMap.get(b.id) || b.visitedCount || 0,
+        }));
+        setBooths(updatedBooths);
       }
 
       if (tasksJson.data && Array.isArray(tasksJson.data)) {
@@ -100,7 +108,7 @@ export function FieldOperationsClient({
     },
   });
 
-  const coverageRate = totalHouseholds > 0 ? ((verifiedCount / totalHouseholds) * 100).toFixed(0) : '0';
+  const coverageRate = totalHouseholds > 0 ? Math.round((verifiedCount / totalHouseholds) * 100) : 0;
 
   return (
     <main className="flex-1 p-8 overflow-y-auto">
@@ -167,7 +175,7 @@ export function FieldOperationsClient({
         <StatCard
           title="Field Verified"
           value={verifiedCount.toLocaleString()}
-          subtitle="Door-to-door confirmed"
+          subtitle={`${verifiedCount} of ${totalHouseholds} visited`}
           icon={CheckCircle2}
           iconColor="text-emerald-600"
           iconBgColor="bg-emerald-50"
@@ -223,9 +231,10 @@ export function FieldOperationsClient({
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {booths.map((b) => {
-                  const boothHouseholds = b._count?.households || 0;
-                  const boothVoters = b._count?.voters || 0;
-                  const progressPct = boothHouseholds > 0 ? Math.round((boothHouseholds / (b.totalElectors > 0 ? b.totalElectors : 10)) * 100) : 0;
+                  const boothHouseholds = b._count?.households ?? b.householdsCount ?? 0;
+                  const boothVoters = b._count?.voters ?? b.votersCount ?? 0;
+                  const boothVisited = b.visitedCount ?? 0;
+                  const progressPct = boothHouseholds > 0 ? Math.round((boothVisited / boothHouseholds) * 100) : 0;
 
                   return (
                     <tr key={b.id} className="hover:bg-slate-50/80 transition">

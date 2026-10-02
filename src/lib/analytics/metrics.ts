@@ -14,7 +14,14 @@ export interface CampaignOperationalMetrics {
   voters: {
     total: number;
     wardDistribution: Array<{ wardId: string; wardNumber: number; name: string; count: number }>;
-    boothDistribution: Array<{ boothId: string; boothNumber: number; name: string; count: number }>;
+    boothDistribution: Array<{
+      boothId: string;
+      boothNumber: number;
+      name: string;
+      count: number;
+      totalHouseholds: number;
+      visitedHouseholds: number;
+    }>;
   };
   households: {
     total: number;
@@ -141,12 +148,11 @@ export async function getCampaignOperationalMetrics(
       where: {
         campaignId,
         householdId: { not: null },
-        status: { in: ['CONTACTED', 'VERIFIED', 'COMPLETED'] },
         ...(filters?.boothId ? { household: { boothId: filters.boothId } } : {}),
         ...(filters?.wardId ? { household: { booth: { wardId: filters.wardId } } } : {}),
       },
       distinct: ['householdId'],
-      select: { householdId: true },
+      select: { householdId: true, household: { select: { boothId: true } } },
     }),
     prisma.household.groupBy({
       by: ['status'],
@@ -202,13 +208,22 @@ export async function getCampaignOperationalMetrics(
     }),
   ]);
 
-  // SSoT Visited Count: either households with explicit verified status or distinct visited interactions
-  const visitedCount = Math.max(verifiedHouseholds, distinctVisitedInteractions.length);
+  // SSoT Visited Count: distinct households with at least one persisted field interaction
+  const visitedCount = distinctVisitedInteractions.length;
   const pendingCount = Math.max(0, totalHouseholds - visitedCount);
   const coveragePercent =
     totalHouseholds > 0
-      ? Math.min(100, Math.max(0, Math.round((visitedCount / totalHouseholds) * 1000) / 10))
+      ? Math.min(100, Math.max(0, Math.round((visitedCount / totalHouseholds) * 100)))
       : 0;
+
+  // Compute booth-level visited households from distinct visited interactions
+  const boothVisitedCounts = new Map<string, number>();
+  for (const item of distinctVisitedInteractions) {
+    const bId = item.household?.boothId;
+    if (bId) {
+      boothVisitedCounts.set(bId, (boothVisitedCounts.get(bId) || 0) + 1);
+    }
+  }
 
   const averageHouseholdSize =
     totalHouseholds > 0 ? Math.round((totalVoters / totalHouseholds) * 10) / 10 : 0;
@@ -261,6 +276,8 @@ export async function getCampaignOperationalMetrics(
         boothNumber: b.boothNumber,
         name: b.name,
         count: b._count.voters,
+        totalHouseholds: b._count.households,
+        visitedHouseholds: boothVisitedCounts.get(b.id) || 0,
       })),
     },
     households: {

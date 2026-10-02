@@ -20,6 +20,9 @@ interface ReportsClientProps {
   initialCounts: {
     totalVoters: number;
     totalHouseholds: number;
+    visitedHouseholds?: number;
+    pendingHouseholds?: number;
+    coveragePercentage?: number;
     totalVisIssued: number;
     totalIssues: number;
     totalTurnoutSnapshots: number;
@@ -92,6 +95,10 @@ export function ReportsClient({
     }
   };
 
+  const visitedCount = initialCounts.visitedHouseholds ?? 0;
+  const pendingCount = initialCounts.pendingHouseholds ?? Math.max(0, initialCounts.totalHouseholds - visitedCount);
+  const coveragePct = initialCounts.coveragePercentage ?? (initialCounts.totalHouseholds > 0 ? Math.round((visitedCount / initialCounts.totalHouseholds) * 100) : 0);
+
   const reportsList = [
     {
       id: 'OPERATIONAL_SUMMARY',
@@ -106,7 +113,7 @@ export function ReportsClient({
       title: 'Daily Voter Coverage & Contact Audit',
       type: 'FIELD_OPERATIONS',
       format: 'CSV',
-      records: `${initialCounts.totalHouseholds} Households`,
+      records: `${visitedCount}/${initialCounts.totalHouseholds} Visited (${coveragePct}%) • ${pendingCount} Pending`,
       description: 'Granular door-to-door audit of residences visited, family heads, contact details, and assigned field agents.',
     },
     {

@@ -35,10 +35,13 @@ export default async function AnalyticsPage({ params }: { params: { id: string }
     }),
   ]);
 
+  const boothVisitedMap = new Map<string, number>();
+  for (const b of metrics.voters.boothDistribution) {
+    boothVisitedMap.set(b.boothId, b.visitedHouseholds);
+  }
+
   const booths = rawBooths.map((b) => {
-    const visitedCount = b.households.filter((h) =>
-      ['Verified', 'Confirmed', 'CONFIRMED'].includes(h.status)
-    ).length;
+    const visitedCount = boothVisitedMap.get(b.id) || 0;
 
     return {
       id: b.id,
