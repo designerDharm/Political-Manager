@@ -171,7 +171,16 @@ export function ReportsClient({
       )}
 
       {/* Metric Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        <StatCard
+          title="Household Coverage"
+          value={`${coveragePct}%`}
+          subtitle={`${visitedCount} of ${initialCounts.totalHouseholds} visited (${pendingCount} pending)`}
+          icon={CheckCircle2}
+          iconColor="text-emerald-600"
+          iconBgColor="bg-emerald-50"
+          badge={{ text: `${visitedCount}/${initialCounts.totalHouseholds} Visited`, type: 'success' }}
+        />
         <StatCard
           title="Available Reports"
           value="5 Standard"
