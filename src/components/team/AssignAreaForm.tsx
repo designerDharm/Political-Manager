@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { UserCheck, MapPin, Check, AlertCircle, RotateCw } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCampaignRealtime } from '@/hooks/useCampaignRealtime';
+import { formatBoothLabel } from '@/lib/formatting';
 
 export function AssignAreaForm({
   campaignId,
@@ -67,7 +68,7 @@ export function AssignAreaForm({
 
       let scopeTarget = 'General';
       if (assignmentType === 'Booth') {
-        scopeTarget = activeBooth ? `Booth ${activeBooth.boothNumber} - ${activeBooth.name}` : 'Booth 118';
+        scopeTarget = activeBooth ? formatBoothLabel(activeBooth.boothNumber, activeBooth.name) : 'Booth 118';
       } else if (assignmentType === 'Ward') {
         scopeTarget = activeWard ? activeWard.name : 'Ward 12 - Central';
       } else {
@@ -205,7 +206,7 @@ export function AssignAreaForm({
                 <option value="">Booth 118</option>
               ) : (
                 booths.map((b) => (
-                  <option key={b.id} value={b.id}>Booth {b.boothNumber} - {b.name}</option>
+                  <option key={b.id} value={b.id}>{formatBoothLabel(b.boothNumber, b.name)}</option>
                 ))
               )}
             </select>

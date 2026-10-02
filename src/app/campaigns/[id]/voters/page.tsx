@@ -1,6 +1,7 @@
 import React from 'react';
 import { prisma } from '@/lib/prisma';
 import VoterListClient from '@/components/voters/VoterListClient';
+import { formatBoothLabel, formatWardLabel } from '@/lib/formatting';
 
 export const revalidate = 0; // Dynamic database query (SSoT)
 
@@ -28,8 +29,10 @@ export default async function VoterListPage({
     if (booth) {
       voterWhere.boothId = boothId;
       householdWhere.boothId = boothId;
-      activeScopeHeading = `Booth ${booth.boothNumber} - ${booth.name}`;
-      scopeBadge = booth.ward ? `Ward ${booth.ward.wardNumber}: ${booth.name}` : booth.name;
+      activeScopeHeading = formatBoothLabel(booth.boothNumber, booth.name);
+      scopeBadge = booth.ward
+        ? `${formatWardLabel(booth.ward.wardNumber, booth.ward.name)} • ${formatBoothLabel(booth.boothNumber, booth.name)}`
+        : formatBoothLabel(booth.boothNumber, booth.name);
     }
   } else if (wardId) {
     const ward = await prisma.ward.findFirst({
@@ -38,8 +41,8 @@ export default async function VoterListPage({
     if (ward) {
       voterWhere.wardId = wardId;
       householdWhere.wardId = wardId;
-      activeScopeHeading = `Ward ${ward.wardNumber} - ${ward.name}`;
-      scopeBadge = `Ward ${ward.wardNumber} - ${ward.name}`;
+      activeScopeHeading = formatWardLabel(ward.wardNumber, ward.name);
+      scopeBadge = formatWardLabel(ward.wardNumber, ward.name);
     }
   }
 

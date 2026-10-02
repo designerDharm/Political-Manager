@@ -6,6 +6,7 @@ import { TopHeader } from '@/components/layout/TopHeader';
 import { Upload, FileText, Check, Clock, Trash2, RotateCw, ArrowRight, AlertCircle, Download, FileSpreadsheet } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { formatBoothLabel, formatWardLabel } from '@/lib/formatting';
 
 export default function VoterUploadPage({ params }: { params: { id: string } }) {
   const router = useRouter();
@@ -264,7 +265,7 @@ export default function VoterUploadPage({ params }: { params: { id: string } }) 
                     >
                       {wardsList.map((w) => (
                         <option key={w.id} value={w.id}>
-                          {w.name} (#{w.wardNumber})
+                          {formatWardLabel(w.wardNumber, w.name)}
                         </option>
                       ))}
                     </select>
@@ -279,7 +280,7 @@ export default function VoterUploadPage({ params }: { params: { id: string } }) 
                     >
                       {(wardsList.find(w => w.id === selectedWardId)?.booths || []).map((b: any) => (
                         <option key={b.id} value={b.id}>
-                          Booth #{b.boothNumber}: {b.name}
+                          {formatBoothLabel(b.boothNumber, b.name)}
                         </option>
                       ))}
                     </select>

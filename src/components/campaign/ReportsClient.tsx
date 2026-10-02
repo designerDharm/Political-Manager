@@ -13,6 +13,7 @@ import {
   Printer
 } from 'lucide-react';
 import { StatCard } from '@/components/ui/StatCard';
+import { formatBoothLabel, formatWardLabel } from '@/lib/formatting';
 
 interface ReportsClientProps {
   campaignId: string;
@@ -219,7 +220,7 @@ export function ReportsClient({
             <option value="">All Wards ({wards.length})</option>
             {wards.map((w) => (
               <option key={w.id} value={w.id}>
-                Ward {w.wardNumber} - {w.name}
+                {formatWardLabel(w.wardNumber, w.name)}
               </option>
             ))}
           </select>
@@ -233,7 +234,7 @@ export function ReportsClient({
             <option value="">All Booths ({filteredBooths.length})</option>
             {filteredBooths.map((b) => (
               <option key={b.id} value={b.id}>
-                Booth {b.boothNumber} - {b.name}
+                {formatBoothLabel(b.boothNumber, b.name)}
               </option>
             ))}
           </select>

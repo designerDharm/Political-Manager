@@ -21,6 +21,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { formatBoothLabel, formatWardLabel } from '@/lib/formatting';
 
 function CreateCampaignWizard() {
   const router = useRouter();
@@ -1256,7 +1257,7 @@ function CreateCampaignWizard() {
                             >
                               <div className="flex items-center justify-between font-bold text-slate-900">
                                 <span className="truncate pr-2">
-                                  Booth #{b.boothNumber}: {b.name}
+                                  {formatBoothLabel(b.boothNumber, b.name)}
                                 </span>
                                 <div className="flex items-center gap-1.5 flex-shrink-0">
                                   <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-mono text-[10px]">

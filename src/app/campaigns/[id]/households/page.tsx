@@ -21,6 +21,7 @@ import {
   X
 } from 'lucide-react';
 import Link from 'next/link';
+import { formatBoothLabel } from '@/lib/formatting';
 
 export default function HouseholdsListPage({ params }: { params: { id: string } }) {
   const [loading, setLoading] = useState(true);
@@ -269,7 +270,7 @@ export default function HouseholdsListPage({ params }: { params: { id: string } 
 
                       <p className="text-xs text-slate-600 font-medium mb-1 truncate">{h.address}</p>
                       <p className="text-[11px] text-slate-400 mb-3">
-                        {h.booth ? `Booth ${h.booth.boothNumber} - ${h.booth.name}` : 'Unassigned Booth'}
+                        {h.booth ? formatBoothLabel(h.booth.boothNumber, h.booth.name) : 'Unassigned Booth'}
                       </p>
 
                       {/* Evidence Signals */}

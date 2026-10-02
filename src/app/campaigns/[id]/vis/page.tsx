@@ -18,6 +18,7 @@ import {
   Check,
   AlertCircle
 } from 'lucide-react';
+import { formatBoothLabel, formatWardLabel } from '@/lib/formatting';
 
 interface Voter {
   id: string;
@@ -185,11 +186,11 @@ export default function CompliantVisIssuancePage({ params }: { params: { id: str
                     <div className="flex flex-wrap items-center gap-4 text-xs text-slate-600 mt-3">
                       <div className="flex items-center gap-1.5">
                         <Building className="w-3.5 h-3.5 text-blue-600" />
-                        <span>Ward {selectedVoter.ward.wardNumber} ({selectedVoter.ward.name})</span>
+                        <span>{formatWardLabel(selectedVoter.ward.wardNumber, selectedVoter.ward.name)}</span>
                       </div>
                       <div className="flex items-center gap-1.5">
                         <MapPin className="w-3.5 h-3.5 text-blue-600" />
-                        <span>Booth {selectedVoter.booth.boothNumber}: {selectedVoter.booth.name}</span>
+                        <span>{formatBoothLabel(selectedVoter.booth.boothNumber, selectedVoter.booth.name)}</span>
                       </div>
                     </div>
                   </div>

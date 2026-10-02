@@ -15,6 +15,7 @@ import {
 import { StatCard } from '@/components/ui/StatCard';
 import { GovernedAiAssistant } from '@/components/analytics/GovernedAiAssistant';
 import { CampaignOperationalMetrics } from '@/lib/analytics/metrics';
+import { formatBoothLabel, formatWardLabel } from '@/lib/formatting';
 
 interface AnalyticsClientProps {
   campaignId: string;
@@ -112,7 +113,7 @@ export function AnalyticsClient({
             <option value="">All Wards ({wards.length})</option>
             {wards.map((w) => (
               <option key={w.id} value={w.id}>
-                Ward {w.wardNumber} - {w.name}
+                {formatWardLabel(w.wardNumber, w.name)}
               </option>
             ))}
           </select>
@@ -125,7 +126,7 @@ export function AnalyticsClient({
             <option value="">All Booths ({filteredBooths.length})</option>
             {filteredBooths.map((b) => (
               <option key={b.id} value={b.id}>
-                Booth {b.boothNumber} - {b.name}
+                {formatBoothLabel(b.boothNumber, b.name)}
               </option>
             ))}
           </select>
@@ -268,7 +269,7 @@ export function AnalyticsClient({
                   <div key={b.id} className="space-y-1">
                     <div className="flex items-center justify-between text-xs">
                       <span className="font-bold text-slate-800">
-                        Booth #{b.boothNumber} - {b.name}
+                        {formatBoothLabel(b.boothNumber, b.name)}
                       </span>
                       <span className="font-mono text-slate-500 text-[11px]">
                         {b.votersCount} Electors • {b.visitedCount}/{b.householdsCount} HH ({pct}%)
