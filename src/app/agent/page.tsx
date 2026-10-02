@@ -84,7 +84,7 @@ export default async function AgentHomePage() {
   ]);
 
   const pendingHouseholds = Math.max(0, totalHouseholds - completedHouseholds);
-  const targetHid = nextHousehold?.code || 'H-001';
+  const targetHid = nextHousehold?.code || nextHousehold?.id || '';
   const assignedAgentName = currentUser.displayName || 'Field Agent';
   const assignedArea = primaryAssignment?.scopeTarget
     ? `${primaryAssignment.scopeType}: ${primaryAssignment.scopeTarget}`

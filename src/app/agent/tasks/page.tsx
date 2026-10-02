@@ -78,7 +78,7 @@ export default async function AgentTasksPage() {
     }),
   ]);
 
-  const targetHid = firstHousehold?.code || 'H-001';
+  const targetHid = firstHousehold?.code || firstHousehold?.id || null;
 
   return (
     <div className="min-h-screen bg-slate-50 flex justify-center">
@@ -158,12 +158,16 @@ export default async function AgentTasksPage() {
                     <span className="flex items-center gap-1">
                       <MapPin className="w-3 h-3 text-slate-400" /> {task.scopeType}: {task.scopeTarget}
                     </span>
-                    <Link
-                      href={`/agent/visit/${targetHid}`}
-                      className="text-xs font-bold text-blue-600 flex items-center gap-0.5 hover:underline"
-                    >
-                      Start Visit <ChevronRight className="w-3.5 h-3.5" />
-                    </Link>
+                    {targetHid ? (
+                      <Link
+                        href={`/agent/visit/${targetHid}`}
+                        className="text-xs font-bold text-blue-600 flex items-center gap-0.5 hover:underline"
+                      >
+                        Start Visit <ChevronRight className="w-3.5 h-3.5" />
+                      </Link>
+                    ) : (
+                      <span className="text-xs font-medium text-slate-400">No pending household</span>
+                    )}
                   </div>
                 </div>
               ))

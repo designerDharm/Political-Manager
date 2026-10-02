@@ -368,12 +368,16 @@ export default function VoterListClient({
                         <td className="p-3.5 font-mono text-slate-700 font-semibold">{voter.epicNumber}</td>
                         <td className="p-3.5 text-slate-600">{voter.houseNumber}</td>
                         <td className="p-3.5">
-                          <Link
-                            href={`/campaigns/${campaignId}/households/${voter.household?.id || voter.household?.code || 'H-001'}`}
-                            className="font-bold text-blue-600 hover:text-blue-800 hover:underline inline-flex items-center gap-1"
-                          >
-                            <span>{voter.household?.code || 'H-001'}</span>
-                          </Link>
+                          {voter.household ? (
+                            <Link
+                              href={`/campaigns/${campaignId}/households/${voter.household.id || voter.household.code}`}
+                              className="font-bold text-blue-600 hover:text-blue-800 hover:underline inline-flex items-center gap-1"
+                            >
+                              <span>{voter.household.code || 'Assigned'}</span>
+                            </Link>
+                          ) : (
+                            <span className="text-slate-400 font-medium italic">Unassigned</span>
+                          )}
                         </td>
                         <td className="p-3.5">
                           {voter.status === 'Processed' ? (
@@ -404,13 +408,20 @@ export default function VoterListClient({
                             {/* Dropdown Menu */}
                             {actionMenuOpenId === voter.id && (
                               <div className="absolute right-0 mt-1 w-44 bg-white border border-slate-200 rounded-xl shadow-xl z-20 py-1 text-xs text-left animate-in fade-in zoom-in-95">
-                                <Link
-                                  href={`/campaigns/${campaignId}/households/${voter.household?.id || voter.household?.code || 'H-001'}`}
-                                  className="w-full px-3.5 py-2 text-slate-700 hover:bg-slate-50 flex items-center gap-2"
-                                >
-                                  <Home className="w-3.5 h-3.5 text-blue-600" />
-                                  <span>View Household</span>
-                                </Link>
+                                {voter.household ? (
+                                  <Link
+                                    href={`/campaigns/${campaignId}/households/${voter.household.id || voter.household.code}`}
+                                    className="w-full px-3.5 py-2 text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                                  >
+                                    <Home className="w-3.5 h-3.5 text-blue-600" />
+                                    <span>View Household</span>
+                                  </Link>
+                                ) : (
+                                  <div className="w-full px-3.5 py-2 text-slate-400 flex items-center gap-2 cursor-not-allowed">
+                                    <Home className="w-3.5 h-3.5 text-slate-300" />
+                                    <span>No Household</span>
+                                  </div>
+                                )}
                                 <button
                                   type="button"
                                   onClick={() => handleEditClick(voter)}

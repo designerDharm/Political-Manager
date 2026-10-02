@@ -12,6 +12,7 @@ export default async function HouseholdDetailPage({
 }) {
   const household = await prisma.household.findFirst({
     where: {
+      campaignId: params.id,
       OR: [
         { id: params.hid },
         { code: params.hid },
@@ -32,49 +33,7 @@ export default async function HouseholdDetailPage({
   });
 
   if (!household) {
-    // Try fallback to first household if testing with non-existent ID
-    const fallback = await prisma.household.findFirst({
-      where: { campaignId: params.id },
-      include: {
-        members: { orderBy: { serialNumber: 'asc' } },
-        interactions: { include: { agent: true }, orderBy: { occurredAt: 'desc' } },
-        booth: { include: { ward: true } },
-      },
-    });
-
-    if (!fallback) {
-      notFound();
-    }
-
-    return (
-      <HouseholdDetailClient
-        campaignId={params.id}
-        household={{
-          id: fallback.id,
-          code: fallback.code,
-          address: fallback.address,
-          houseNumber: fallback.houseNumber,
-          aiConfidence: fallback.aiConfidence,
-          status: fallback.status,
-          booth: fallback.booth,
-          members: fallback.members.map((m) => ({
-            id: m.id,
-            name: m.name,
-            age: m.age,
-            gender: m.gender,
-            epicNumber: m.epicNumber,
-            roleInHousehold: m.roleInHousehold,
-          })),
-          interactions: fallback.interactions.map((i) => ({
-            id: i.id,
-            status: i.status,
-            notes: i.notes,
-            occurredAt: i.occurredAt.toISOString(),
-            agent: i.agent ? { displayName: i.agent.displayName } : null,
-          })),
-        }}
-      />
-    );
+    notFound();
   }
 
   return (

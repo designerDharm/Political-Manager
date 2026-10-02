@@ -143,22 +143,60 @@ export default function AgentSearchPage() {
           ) : (
             <div className="space-y-2">
               {filtered.map((v) => {
-                const hid = v.household?.code || v.householdId || 'H-001';
-                const status = v.household?.status || 'Pending';
+                const hid = v.household?.code || v.householdId;
+                const status = v.household?.status || 'Unassigned';
+
+                if (hid) {
+                  return (
+                    <Link
+                      key={v.id}
+                      href={`/agent/visit/${hid}`}
+                      className="p-3 border border-slate-100 rounded-xl bg-slate-50/60 hover:bg-blue-50/40 hover:border-blue-200 transition flex items-center justify-between block"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-full bg-blue-100 text-blue-700 font-bold flex items-center justify-center text-xs">
+                          {v.name.slice(0, 1)}
+                        </div>
+                        <div>
+                          <h4 className="text-xs font-bold text-slate-900">{v.name}</h4>
+                          <p className="text-[11px] text-slate-500 font-mono">
+                            EPIC: {v.epicNumber || 'N/A'} • {v.household?.code || `House #${v.houseNumber}`}
+                          </p>
+                          {v.booth && (
+                            <p className="text-[10px] text-slate-400">
+                              Booth #{v.booth.boothNumber} - {v.booth.name}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          status === 'Verified' || status === 'Confirmed'
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            : 'bg-amber-50 text-amber-700 border border-amber-200'
+                        }`}>
+                          {status}
+                        </span>
+                        <ChevronRight className="w-4 h-4 text-slate-400" />
+                      </div>
+                    </Link>
+                  );
+                }
+
                 return (
-                  <Link
+                  <div
                     key={v.id}
-                    href={`/agent/visit/${hid}`}
-                    className="p-3 border border-slate-100 rounded-xl bg-slate-50/60 hover:bg-blue-50/40 hover:border-blue-200 transition flex items-center justify-between block"
+                    className="p-3 border border-slate-100 rounded-xl bg-slate-50/60 flex items-center justify-between"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-full bg-blue-100 text-blue-700 font-bold flex items-center justify-center text-xs">
+                      <div className="w-9 h-9 rounded-full bg-slate-100 text-slate-600 font-bold flex items-center justify-center text-xs">
                         {v.name.slice(0, 1)}
                       </div>
                       <div>
                         <h4 className="text-xs font-bold text-slate-900">{v.name}</h4>
                         <p className="text-[11px] text-slate-500 font-mono">
-                          EPIC: {v.epicNumber || 'N/A'} • {v.household?.code || `House #${v.houseNumber}`}
+                          EPIC: {v.epicNumber || 'N/A'} • House #{v.houseNumber}
                         </p>
                         {v.booth && (
                           <p className="text-[10px] text-slate-400">
@@ -169,16 +207,11 @@ export default function AgentSearchPage() {
                     </div>
 
                     <div className="flex items-center gap-2">
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                        status === 'Verified' || status === 'Confirmed'
-                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                          : 'bg-amber-50 text-amber-700 border border-amber-200'
-                      }`}>
-                        {status}
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                        Unassigned
                       </span>
-                      <ChevronRight className="w-4 h-4 text-slate-400" />
                     </div>
-                  </Link>
+                  </div>
                 );
               })}
             </div>
