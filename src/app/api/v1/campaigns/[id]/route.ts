@@ -159,7 +159,16 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     if (candidateName !== undefined) updateData.candidateName = candidateName ? candidateName.trim() : null;
     if (partyName !== undefined) updateData.partyName = partyName ? partyName.trim() : null;
     if (candidatePhoto !== undefined) updateData.candidatePhoto = candidatePhoto;
-    if (description !== undefined) updateData.description = description ? description.trim() : null;
+    if (description !== undefined) {
+      const cleanDesc = description ? description.trim() : '';
+      if (existing.description && existing.description.includes('ELECTION_DAY_STATE:')) {
+        const marker = 'ELECTION_DAY_STATE:';
+        const stateStr = existing.description.substring(existing.description.indexOf(marker));
+        updateData.description = cleanDesc ? `${cleanDesc}\n${stateStr}` : stateStr;
+      } else {
+        updateData.description = cleanDesc || null;
+      }
+    }
     if (status !== undefined) updateData.status = status;
     if (targetVoters !== undefined) updateData.targetVoters = Number(targetVoters);
     if (targetCoverage !== undefined) updateData.targetCoverage = Number(targetCoverage);

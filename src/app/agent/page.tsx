@@ -36,7 +36,7 @@ export default async function AgentHomePage() {
     include: { campaign: true },
   });
 
-  const activeCampaignId = membership?.campaignId || (await prisma.campaign.findFirst({ where: { status: 'ACTIVE' } }))?.id;
+  const activeCampaignId = membership?.campaignId || undefined;
 
   // Resolve agent's assigned booths
   let agentBoothIds: string[] = [];
@@ -49,46 +49,58 @@ export default async function AgentHomePage() {
   }
 
   // Query agent's active assignments
-  const assignments = await prisma.assignment.findMany({
-    where: {
-      userId: currentUser.id,
-      status: 'Active',
-      ...(activeCampaignId ? { campaignId: activeCampaignId } : {}),
-    },
-    orderBy: { createdAt: 'desc' },
-  });
+  const assignments = activeCampaignId
+    ? await prisma.assignment.findMany({
+        where: {
+          userId: currentUser.id,
+          status: 'Active',
+          campaignId: activeCampaignId,
+        },
+        orderBy: { createdAt: 'desc' },
+      })
+    : [];
 
   const primaryAssignment = assignments[0];
 
-  // Derive household filter for agent
-  const householdWhere: any = {};
-  if (activeCampaignId) householdWhere.campaignId = activeCampaignId;
-  if (agentBoothIds.length > 0) {
-    householdWhere.boothId = { in: agentBoothIds };
+  // Derive household filter for agent: ONLY valid if agent has active assignments and membership in this campaign
+  let totalHouseholds = 0;
+  let completedHouseholds = 0;
+  let nextHousehold: any = null;
+  let openIssuesCount = 0;
+
+  if (activeCampaignId && assignments.length > 0) {
+    const householdWhere: any = { campaignId: activeCampaignId };
+    if (agentBoothIds.length > 0) {
+      householdWhere.boothId = { in: agentBoothIds };
+    }
+
+    const [totH, compH, nextH, issuesC] = await Promise.all([
+      prisma.household.count({ where: householdWhere }),
+      prisma.household.count({ where: { ...householdWhere, status: 'Verified' } }),
+      prisma.household.findFirst({
+        where: { ...householdWhere, status: { not: 'Verified' } },
+        orderBy: { code: 'asc' },
+      }),
+      prisma.issue.count({
+        where: {
+          campaignId: activeCampaignId,
+          status: { in: ['OPEN', 'IN_PROGRESS'] },
+        },
+      }),
+    ]);
+
+    totalHouseholds = totH;
+    completedHouseholds = compH;
+    nextHousehold = nextH;
+    openIssuesCount = issuesC;
   }
 
-  // SSoT Metrics
-  const [totalHouseholds, completedHouseholds, nextHousehold, openIssuesCount] = await Promise.all([
-    prisma.household.count({ where: householdWhere }),
-    prisma.household.count({ where: { ...householdWhere, status: 'Verified' } }),
-    prisma.household.findFirst({
-      where: { ...householdWhere, status: { not: 'Verified' } },
-      orderBy: { code: 'asc' },
-    }) || prisma.household.findFirst({ where: householdWhere, orderBy: { code: 'asc' } }),
-    prisma.issue.count({
-      where: {
-        ...(activeCampaignId ? { campaignId: activeCampaignId } : {}),
-        status: { in: ['OPEN', 'IN_PROGRESS'] },
-      },
-    }),
-  ]);
-
-  const pendingHouseholds = Math.max(0, totalHouseholds - completedHouseholds);
-  const targetHid = nextHousehold?.code || nextHousehold?.id || '';
+  const pendingHouseholds = assignments.length > 0 ? Math.max(0, totalHouseholds - completedHouseholds) : 0;
+  const targetHid = nextHousehold ? (nextHousehold.code || nextHousehold.id || '') : '';
   const assignedAgentName = currentUser.displayName || 'Field Agent';
   const assignedArea = primaryAssignment?.scopeTarget
     ? `${primaryAssignment.scopeType}: ${primaryAssignment.scopeTarget}`
-    : (membership?.scopeType === 'ALL' ? 'Full Campaign Scope' : 'Booth Scope Active');
+    : (membership?.scopeType === 'ALL' ? 'Full Campaign Scope' : 'No Active Assignment');
 
   return (
     <div className="min-h-screen bg-slate-50 flex justify-center">
@@ -176,7 +188,7 @@ export default async function AgentHomePage() {
           </div>
 
           {/* Big "Start Visit" CTA Button */}
-          {nextHousehold ? (
+          {assignments.length > 0 && nextHousehold ? (
             <Link
               href={`/agent/visit/${targetHid}`}
               className="w-full py-3.5 px-6 bg-blue-600 hover:bg-blue-700 active:scale-[0.99] text-white rounded-2xl font-bold text-sm shadow-md shadow-blue-500/30 flex items-center justify-center gap-2 transition"
@@ -185,11 +197,11 @@ export default async function AgentHomePage() {
               <span>Continue Visit ({targetHid})</span>
               <ChevronRight className="w-4 h-4 ml-auto" />
             </Link>
-          ) : (
+          ) : assignments.length > 0 ? (
             <div className="w-full py-3 px-4 bg-slate-100 border border-slate-200 rounded-2xl text-center text-xs text-slate-500 font-semibold">
               No pending households in your assigned scope.
             </div>
-          )}
+          ) : null}
 
           {/* Today's Tasks */}
           <div className="pt-2">

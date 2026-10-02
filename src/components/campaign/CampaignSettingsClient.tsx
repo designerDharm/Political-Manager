@@ -10,10 +10,27 @@ interface CampaignSettingsClientProps {
 
 export function CampaignSettingsClient({ campaign }: CampaignSettingsClientProps) {
   const router = useRouter();
+  // Clean description and extract ELECTION_DAY_STATE
+  const initialRawDesc = campaign?.description || '';
+  let initialDesc = initialRawDesc;
+  let initialElectionDayState: { status: string; openedAt: string | null; closedAt: string | null } | null = null;
+
+  if (initialRawDesc.includes('ELECTION_DAY_STATE:')) {
+    const marker = 'ELECTION_DAY_STATE:';
+    const splitIndex = initialRawDesc.indexOf(marker);
+    initialDesc = initialRawDesc.substring(0, splitIndex).trim();
+    try {
+      initialElectionDayState = JSON.parse(initialRawDesc.substring(splitIndex + marker.length));
+    } catch {
+      initialElectionDayState = null;
+    }
+  }
+
   const [name, setName] = useState(campaign?.name || '');
   const [candidateName, setCandidateName] = useState(campaign?.candidateName || '');
   const [partyName, setPartyName] = useState(campaign?.partyName || 'Independent');
-  const [description, setDescription] = useState(campaign?.description || '');
+  const [description, setDescription] = useState(initialDesc);
+  const [electionDayState] = useState(initialElectionDayState);
   const [constituencyName, setConstituencyName] = useState(campaign?.constituencyName || campaign?.electionName || '');
   const [estimatedVoters, setEstimatedVoters] = useState(String(campaign?.estimatedVoters || campaign?.targetVoters || 0));
   const [targetVotes, setTargetVotes] = useState(String(campaign?.targetVotes || 0));
@@ -256,6 +273,44 @@ export function CampaignSettingsClient({ campaign }: CampaignSettingsClientProps
                 <span>Wards / Booths:</span>
                 <span className="text-slate-700 font-bold">
                   {campaign._count?.wards || 0} Wards / {campaign._count?.booths || 0} Booths
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl border border-slate-200 shadow-card p-6">
+            <h3 className="text-sm font-bold text-slate-900 mb-3 flex items-center gap-2">
+              <Target className="w-4 h-4 text-blue-600" /> Election Day Operations
+            </h3>
+            <div className="space-y-3 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-600 font-medium">Status</span>
+                <span
+                  className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
+                    electionDayState?.status === 'ACTIVE'
+                      ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                      : electionDayState?.status === 'CLOSED'
+                      ? 'bg-slate-200 text-slate-700 border border-slate-300'
+                      : 'bg-amber-100 text-amber-800 border border-amber-200'
+                  }`}
+                >
+                  {electionDayState?.status || 'NOT_STARTED'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-slate-500">
+                <span>Opened At</span>
+                <span className="font-mono text-[11px] text-slate-700">
+                  {electionDayState?.openedAt
+                    ? new Date(electionDayState.openedAt).toLocaleString()
+                    : 'Not opened'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-slate-500">
+                <span>Closed At</span>
+                <span className="font-mono text-[11px] text-slate-700">
+                  {electionDayState?.closedAt
+                    ? new Date(electionDayState.closedAt).toLocaleString()
+                    : 'Not closed'}
                 </span>
               </div>
             </div>

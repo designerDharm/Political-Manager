@@ -1,4 +1,7 @@
 import { prisma } from '@/lib/prisma';
+import { computeAuditEventHash, GENESIS_AUDIT_HASH } from './auditHash';
+
+export { computeAuditEventHash, GENESIS_AUDIT_HASH };
 
 export async function logAuditEvent(params: {
   organizationId: string;
@@ -10,23 +13,17 @@ export async function logAuditEvent(params: {
   ipAddress?: string | null;
 }) {
   try {
-    // Tamper-evident hash chaining
+    // Tamper-evident cryptographic SHA-256 hash chaining
     const lastEvent = await prisma.auditEvent.findFirst({
       orderBy: { createdAt: 'desc' },
       select: { hash: true },
     });
 
-    const prevHash = lastEvent?.hash || '00000000000000000000000000000000';
-    const rawContent = `${prevHash}:${params.organizationId}:${params.action}:${params.resource}:${Date.now()}`;
-    
-    // Simple deterministic hash representation
-    let hash = 0;
-    for (let i = 0; i < rawContent.length; i++) {
-      const char = rawContent.charCodeAt(i);
-      hash = (hash << 5) - hash + char;
-      hash |= 0;
-    }
-    const currentHash = Math.abs(hash).toString(16).padStart(16, '0');
+    const prevHash = lastEvent?.hash && lastEvent.hash.trim().length > 0
+      ? lastEvent.hash.trim()
+      : GENESIS_AUDIT_HASH;
+
+    const currentHash = computeAuditEventHash(prevHash, params);
 
     return await prisma.auditEvent.create({
       data: {
@@ -45,3 +42,4 @@ export async function logAuditEvent(params: {
     console.error('Audit event failed to record:', err);
   }
 }
+

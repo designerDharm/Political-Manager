@@ -14,7 +14,6 @@ export function GovernedAiAssistant({ campaignId }: { campaignId: string }) {
     'Show aggregate turnout progression from authorized agents.',
     'Summarize reported community infrastructure issues.',
     'How many Voter Information Slips (VIS) were issued at civic desks?',
-    'Who is most likely to vote for our candidate?', // deliberate guardrail test
   ];
 
   async function handleAsk(queryToRun?: string) {

@@ -331,7 +331,7 @@ export default function MobileVisitPage({ params }: { params: { hid: string } })
         
         {/* Top Header */}
         <header className="p-4 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white/95 backdrop-blur z-20">
-          <Link href="/agent" className="p-1 -ml-1 text-slate-700 hover:text-slate-900">
+          <Link href="/agent" aria-label="Back to Dashboard" className="p-1 -ml-1 text-slate-700 hover:text-slate-900">
             <ChevronLeft className="w-6 h-6" />
           </Link>
 
@@ -342,7 +342,9 @@ export default function MobileVisitPage({ params }: { params: { hid: string } })
           <div className="flex items-center gap-2">
             <OfflineSyncStatusBadge campaignId={household?.campaignId} />
             <button
+              type="button"
               onClick={() => setShowIssueModal(true)}
+              aria-label="Report Operational Issue"
               className="p-1 text-slate-500 hover:text-slate-700 text-xs font-semibold flex items-center gap-1"
             >
               <AlertCircle className="w-4 h-4 text-amber-500" />
@@ -354,7 +356,7 @@ export default function MobileVisitPage({ params }: { params: { hid: string } })
         {/* Content */}
         <main className="p-4 space-y-4 flex-1 overflow-y-auto">
           {errorMessage && (
-            <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold rounded-xl flex items-center gap-2">
+            <div role="alert" className="p-3 bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold rounded-xl flex items-center gap-2">
               <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0" />
               <span>{errorMessage}</span>
             </div>
@@ -362,7 +364,9 @@ export default function MobileVisitPage({ params }: { params: { hid: string } })
 
           {/* Title */}
           <div>
-            <h1 className="text-xl font-black text-slate-900">Household {household?.code || params.hid}</h1>
+            <h1 className="text-xl font-black text-slate-900" aria-label={`Household ID: ${household?.code || params.hid}`}>
+              Household <span data-testid="household-id">{household?.code || params.hid}</span>
+            </h1>
             <p className="text-xs text-slate-500 font-medium">
               {household?.booth?.ward?.name || 'Ward'} • Booth #{household?.booth?.boothNumber || '1'}
             </p>
@@ -404,20 +408,29 @@ export default function MobileVisitPage({ params }: { params: { hid: string } })
           {/* Members List */}
           <div>
             <div className="flex items-center justify-between mb-2 px-1">
-              <h4 className="text-xs font-bold text-slate-900">Members ({members.length})</h4>
-              <button onClick={selectAll} className="text-xs font-bold text-blue-600 hover:underline">
+              <h2 className="text-xs font-bold text-slate-900">Members ({members.length})</h2>
+              <button
+                type="button"
+                onClick={selectAll}
+                aria-label={selectedMembers.length === members.length ? 'Deselect all members' : 'Select all members'}
+                className="text-xs font-bold text-blue-600 hover:underline"
+              >
                 {selectedMembers.length === members.length ? 'Deselect All' : 'Select All'}
               </button>
             </div>
 
-            <div className="bg-white border border-slate-200 rounded-2xl divide-y divide-slate-100 overflow-hidden">
+            <div className="bg-white border border-slate-200 rounded-2xl divide-y divide-slate-100 overflow-hidden" role="group" aria-label="Household members">
               {members.map((m: any) => {
                 const isChecked = selectedMembers.includes(m.id);
                 return (
-                  <div
+                  <button
                     key={m.id}
+                    type="button"
+                    role="checkbox"
+                    aria-checked={isChecked}
+                    aria-label={`Select member ${m.name}`}
                     onClick={() => toggleMember(m.id)}
-                    className="p-3.5 flex items-center justify-between hover:bg-slate-50 cursor-pointer transition"
+                    className="w-full text-left p-3.5 flex items-center justify-between hover:bg-slate-50 cursor-pointer transition"
                   >
                     <div className="flex items-center gap-3">
                       <div
@@ -443,23 +456,29 @@ export default function MobileVisitPage({ params }: { params: { hid: string } })
                       <span>•</span>
                       <span>{m.gender}</span>
                     </div>
-                  </div>
+                  </button>
                 );
               })}
             </div>
           </div>
 
           {/* Visit Status Radios */}
-          <div>
-            <h4 className="text-xs font-bold text-slate-900 mb-2 px-1">Visit Status</h4>
-            <div className="space-y-2">
+          <fieldset className="space-y-2">
+            <legend className="text-xs font-bold text-slate-900 mb-2 px-1" id="visit-status-label">
+              Visit Status
+            </legend>
+            <div role="radiogroup" aria-labelledby="visit-status-label" className="space-y-2">
               {statuses.map((st) => {
                 const isSelected = visitStatus === st.id;
                 return (
-                  <div
+                  <button
                     key={st.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={isSelected}
+                    aria-label={`Visit Status: ${st.label}`}
                     onClick={() => setVisitStatus(st.id)}
-                    className={`p-3.5 rounded-xl border flex items-center justify-between cursor-pointer transition ${
+                    className={`w-full text-left p-3.5 rounded-xl border flex items-center justify-between cursor-pointer transition ${
                       isSelected
                         ? 'border-blue-600 bg-blue-50/50 text-blue-900 font-bold'
                         : 'border-slate-200 bg-white text-slate-700 font-medium hover:bg-slate-50'
@@ -477,37 +496,40 @@ export default function MobileVisitPage({ params }: { params: { hid: string } })
                     </div>
 
                     {isSelected && <CheckCircle2 className="w-4 h-4 text-blue-600" />}
-                  </div>
+                  </button>
                 );
               })}
             </div>
-          </div>
+          </fieldset>
 
           {/* Visit Note Preview / Field */}
           <div>
             <div className="flex items-center justify-between mb-1.5 px-1">
-              <h4 className="text-xs font-bold text-slate-900">Visit Notes</h4>
+              <label htmlFor="visit-notes-display" className="text-xs font-bold text-slate-900 cursor-pointer">
+                Visit Notes
+              </label>
               <button
                 type="button"
                 onClick={() => setShowNoteModal(true)}
+                aria-label={notes ? 'Edit Visit Note' : 'Add Visit Note'}
                 className="text-xs font-bold text-blue-600 hover:underline"
               >
                 {notes ? 'Edit Note' : '+ Add Note'}
               </button>
             </div>
             {notes ? (
-              <div className="p-3 bg-blue-50/50 border border-blue-100 rounded-xl text-xs text-slate-700">
+              <div id="visit-notes-display" className="p-3 bg-blue-50/50 border border-blue-100 rounded-xl text-xs text-slate-700">
                 {notes}
               </div>
             ) : (
-              <p className="text-[11px] text-slate-400 italic px-1">No note attached yet.</p>
+              <p id="visit-notes-display" className="text-[11px] text-slate-400 italic px-1">No note attached yet.</p>
             )}
           </div>
 
           {/* Previous Visits / History */}
           {household?.interactions && household.interactions.length > 0 && (
             <div>
-              <h4 className="text-xs font-bold text-slate-900 mb-2 px-1">Previous Visit History</h4>
+              <h2 className="text-xs font-bold text-slate-900 mb-2 px-1">Previous Visit History</h2>
               <div className="space-y-2">
                 {household.interactions.map((int: any) => (
                   <div key={int.id} className="p-3 rounded-xl border border-slate-100 bg-slate-50 text-xs">
@@ -534,6 +556,7 @@ export default function MobileVisitPage({ params }: { params: { hid: string } })
           <button
             type="button"
             onClick={() => setShowNoteModal(true)}
+            aria-label={notes ? 'Edit Visit Note' : 'Add Visit Note'}
             className="py-3 px-4 border border-blue-600 text-blue-600 hover:bg-blue-50 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition"
           >
             <FileText className="w-4 h-4" />
@@ -544,6 +567,7 @@ export default function MobileVisitPage({ params }: { params: { hid: string } })
             type="button"
             onClick={handleSave}
             disabled={saving || saved}
+            aria-label="Save Visit"
             className="py-3 px-4 bg-blue-600 hover:bg-blue-700 active:scale-[0.99] text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition shadow-md shadow-blue-500/25 disabled:opacity-75"
           >
             {saving ? (
@@ -565,25 +589,38 @@ export default function MobileVisitPage({ params }: { params: { hid: string } })
 
         {/* Note Dialog Modal */}
         {showNoteModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+          <div role="dialog" aria-modal="true" aria-labelledby="modal-note-title" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
             <div className="bg-white rounded-2xl p-5 w-full max-w-sm border border-slate-200 shadow-xl space-y-3">
               <div className="flex items-center justify-between">
-                <h3 className="font-bold text-sm text-slate-900">Add Field Visit Note</h3>
-                <button onClick={() => setShowNoteModal(false)} className="text-slate-400 hover:text-slate-600">
+                <h3 id="modal-note-title" className="font-bold text-sm text-slate-900">Add Field Visit Note</h3>
+                <button
+                  type="button"
+                  onClick={() => setShowNoteModal(false)}
+                  aria-label="Close note dialog"
+                  className="text-slate-400 hover:text-slate-600"
+                >
                   <X className="w-4 h-4" />
                 </button>
               </div>
-              <textarea
-                rows={4}
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Enter details of your visit with this family..."
-                className="w-full p-2.5 border border-slate-200 rounded-xl text-xs bg-slate-50 focus:bg-white"
-              />
+              <div>
+                <label htmlFor="visit-notes" className="block text-xs font-semibold text-slate-700 mb-1">
+                  Visit Notes
+                </label>
+                <textarea
+                  id="visit-notes"
+                  name="visitNotes"
+                  rows={4}
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Enter details of your visit with this family..."
+                  className="w-full p-2.5 border border-slate-200 rounded-xl text-xs bg-slate-50 focus:bg-white"
+                />
+              </div>
               <div className="flex items-center justify-end gap-2 pt-2">
                 <button
                   type="button"
                   onClick={() => setShowNoteModal(false)}
+                  aria-label="Done note editing"
                   className="px-3 py-1.5 border border-slate-200 text-slate-600 rounded-lg text-xs font-semibold"
                 >
                   Done
@@ -595,19 +632,26 @@ export default function MobileVisitPage({ params }: { params: { hid: string } })
 
         {/* Issue Report Modal */}
         {showIssueModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+          <div role="dialog" aria-modal="true" aria-labelledby="modal-issue-title" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
             <div className="bg-white rounded-2xl p-5 w-full max-w-sm border border-slate-200 shadow-xl space-y-3">
               <div className="flex items-center justify-between">
-                <h3 className="font-bold text-sm text-slate-900">Report Operational Issue</h3>
-                <button onClick={() => setShowIssueModal(false)} className="text-slate-400 hover:text-slate-600">
+                <h3 id="modal-issue-title" className="font-bold text-sm text-slate-900">Report Operational Issue</h3>
+                <button
+                  type="button"
+                  onClick={() => setShowIssueModal(false)}
+                  aria-label="Close issue report dialog"
+                  className="text-slate-400 hover:text-slate-600"
+                >
                   <X className="w-4 h-4" />
                 </button>
               </div>
 
               <form onSubmit={handleCreateIssue} className="space-y-3 text-xs">
                 <div>
-                  <label className="block font-bold text-slate-700 text-[10px] uppercase mb-1">Issue Title</label>
+                  <label htmlFor="issue-title" className="block font-bold text-slate-700 text-[10px] uppercase mb-1">Issue Title</label>
                   <input
+                    id="issue-title"
+                    name="issueTitle"
                     type="text"
                     required
                     value={issueTitle}
@@ -619,8 +663,10 @@ export default function MobileVisitPage({ params }: { params: { hid: string } })
 
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="block font-bold text-slate-700 text-[10px] uppercase mb-1">Category</label>
+                    <label htmlFor="issue-category" className="block font-bold text-slate-700 text-[10px] uppercase mb-1">Category</label>
                     <select
+                      id="issue-category"
+                      name="issueCategory"
                       value={issueCategory}
                       onChange={(e) => setIssueCategory(e.target.value)}
                       className="w-full p-2 border border-slate-200 rounded-lg bg-slate-50"
@@ -633,8 +679,10 @@ export default function MobileVisitPage({ params }: { params: { hid: string } })
                   </div>
 
                   <div>
-                    <label className="block font-bold text-slate-700 text-[10px] uppercase mb-1">Priority</label>
+                    <label htmlFor="issue-priority" className="block font-bold text-slate-700 text-[10px] uppercase mb-1">Priority</label>
                     <select
+                      id="issue-priority"
+                      name="issuePriority"
                       value={issuePriority}
                       onChange={(e) => setIssuePriority(e.target.value)}
                       className="w-full p-2 border border-slate-200 rounded-lg bg-slate-50"
@@ -647,8 +695,10 @@ export default function MobileVisitPage({ params }: { params: { hid: string } })
                 </div>
 
                 <div>
-                  <label className="block font-bold text-slate-700 text-[10px] uppercase mb-1">Description</label>
+                  <label htmlFor="issue-description" className="block font-bold text-slate-700 text-[10px] uppercase mb-1">Description</label>
                   <textarea
+                    id="issue-description"
+                    name="issueDescription"
                     rows={3}
                     required
                     value={issueDescription}

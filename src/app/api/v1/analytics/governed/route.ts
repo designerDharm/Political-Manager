@@ -2,19 +2,30 @@ import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { apiSuccess, apiError } from '@/lib/api/response';
 
-// Guardrail keywords that must NEVER be processed by the analytics engine
+// Guardrail keywords that must NEVER be processed by the analytics engine (Strict Non-Inference Policy)
 const PROHIBITED_KEYWORDS = [
   'vote for',
+  'vote-prediction',
+  'prediction',
+  'predict',
   'political preference',
+  'political-support',
+  'support probability',
+  'likely to vote',
   'leaning',
   'persuadable',
+  'persuasion',
+  'persuade',
   'ideology',
+  'ideological',
   'religion',
+  'religious',
   'caste',
   'conversion score',
   'who will vote',
   'party affinity',
   'undecided voter',
+  'voter preference',
 ];
 
 import { requireAuth } from '@/lib/auth';
