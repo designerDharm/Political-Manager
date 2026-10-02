@@ -57,6 +57,9 @@ export default function VoterListClient({
   totalHouseholdsCount,
   processedVotersCount,
   activeWardName,
+  activeScopeHeading,
+  activeBoothId,
+  activeWardId,
 }: {
   campaignId: string;
   initialVoters: VoterItem[];
@@ -64,6 +67,9 @@ export default function VoterListClient({
   totalHouseholdsCount: number;
   processedVotersCount: number;
   activeWardName: string;
+  activeScopeHeading?: string;
+  activeBoothId?: string;
+  activeWardId?: string;
 }) {
   const router = useRouter();
   const [voters, setVoters] = useState<VoterItem[]>(initialVoters);
@@ -194,7 +200,21 @@ export default function VoterListClient({
           {/* Title & Subtitle + Action Buttons */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
             <div>
-              <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Voters - {activeWardName} (AI Processed)</h1>
+              <div className="flex items-center gap-2.5">
+                <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+                  Voters - {activeScopeHeading || activeWardName}
+                </h1>
+                {(activeBoothId || activeWardId) && (
+                  <Link
+                    href={`/campaigns/${campaignId}/voters`}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition"
+                    title="Clear filter to view all voters across campaign"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                    <span>All Booths</span>
+                  </Link>
+                )}
+              </div>
               <p className="text-xs text-slate-500 mt-1">
                 View, filter, edit, and inspect AI-processed voters with dynamic household mapping and live interaction links.
               </p>

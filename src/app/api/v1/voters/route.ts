@@ -21,6 +21,8 @@ export async function GET(req: NextRequest) {
     }
 
     const query = searchParams.get('q')?.trim();
+    const boothId = searchParams.get('boothId');
+    const wardId = searchParams.get('wardId');
     const wardNumber = searchParams.get('ward');
     const boothNumber = searchParams.get('booth');
     const gender = searchParams.get('gender');
@@ -44,6 +46,18 @@ export async function GET(req: NextRequest) {
           where.boothId = { in: allowedBooths };
         }
       }
+    }
+
+    if (boothId) {
+      where.boothId = boothId;
+    } else if (boothNumber) {
+      where.booth = { boothNumber: Number(boothNumber) };
+    }
+
+    if (wardId) {
+      where.wardId = wardId;
+    } else if (wardNumber) {
+      where.ward = { wardNumber: Number(wardNumber) };
     }
 
     if (gender && gender !== 'All') where.gender = gender.charAt(0);
