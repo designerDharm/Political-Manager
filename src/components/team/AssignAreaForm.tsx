@@ -68,9 +68,19 @@ export function AssignAreaForm({
 
       let scopeTarget = 'General';
       if (assignmentType === 'Booth') {
-        scopeTarget = activeBooth ? formatBoothLabel(activeBooth.boothNumber, activeBooth.name) : 'Booth 118';
+        if (!activeBooth) {
+          setError('No booths available in this campaign for booth assignment');
+          setSubmitting(false);
+          return;
+        }
+        scopeTarget = formatBoothLabel(activeBooth.boothNumber, activeBooth.name);
       } else if (assignmentType === 'Ward') {
-        scopeTarget = activeWard ? activeWard.name : 'Ward 12 - Central';
+        if (!activeWard) {
+          setError('No wards available in this campaign for ward assignment');
+          setSubmitting(false);
+          return;
+        }
+        scopeTarget = activeWard.name;
       } else {
         scopeTarget = 'Selected Households';
       }
@@ -96,9 +106,7 @@ export function AssignAreaForm({
       setMessage('Area successfully assigned to field agent!');
       router.refresh();
     } catch (err: any) {
-
       setError(err.message || 'Failed to assign area');
-
     } finally {
       setSubmitting(false);
     }
@@ -141,7 +149,7 @@ export function AssignAreaForm({
             className="w-full p-2.5 border border-slate-200 rounded-lg bg-slate-50 text-slate-800 font-semibold"
           >
             {users.length === 0 ? (
-              <option value="">No agents available</option>
+              <option value="">No agents available in this campaign</option>
             ) : (
               users.map((u) => (
                 <option key={u.id} value={u.id}>
@@ -185,7 +193,7 @@ export function AssignAreaForm({
               className="w-full p-2 border border-slate-200 rounded-lg bg-slate-50"
             >
               {wards.length === 0 ? (
-                <option value="">Ward 12 (Central)</option>
+                <option value="">No wards configured</option>
               ) : (
                 wards.map((w) => (
                   <option key={w.id} value={w.id}>{w.name}</option>
@@ -203,7 +211,7 @@ export function AssignAreaForm({
               className="w-full p-2 border border-slate-200 rounded-lg bg-slate-50"
             >
               {booths.length === 0 ? (
-                <option value="">Booth 118</option>
+                <option value="">No booths configured</option>
               ) : (
                 booths.map((b) => (
                   <option key={b.id} value={b.id}>{formatBoothLabel(b.boothNumber, b.name)}</option>

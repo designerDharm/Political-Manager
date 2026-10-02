@@ -32,12 +32,25 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       }
     }
 
+    if (assigneeId !== undefined && assigneeId !== null && assigneeId !== '') {
+      const membership = await prisma.campaignMembership.findFirst({
+        where: { campaignId: existing.campaignId, userId: assigneeId, active: true },
+      });
+      if (!membership) {
+        return apiError(
+          'FORBIDDEN',
+          'Cross-campaign assignment rejected: Assignee is not an active member of this campaign',
+          403
+        );
+      }
+    }
+
     const updated = await prisma.issue.update({
       where: { id: params.id },
       data: {
         status: status || existing.status,
         priority: priority || existing.priority,
-        assigneeId: assigneeId !== undefined ? assigneeId : existing.assigneeId,
+        assigneeId: assigneeId !== undefined ? (assigneeId || null) : existing.assigneeId,
       },
       include: {
         notes: true,

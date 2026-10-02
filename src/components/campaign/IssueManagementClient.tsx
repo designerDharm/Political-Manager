@@ -72,9 +72,9 @@ export function IssueManagementClient({
   const [modalCategory, setModalCategory] = useState('Voter Data');
   const [modalPriority, setModalPriority] = useState('HIGH');
   const [modalDescription, setModalDescription] = useState('');
-  const [modalHouseholdId, setModalHouseholdId] = useState(households[0]?.id || '');
-  const [modalBoothId, setModalBoothId] = useState(booths[0]?.id || '');
-  const [modalAssigneeId, setModalAssigneeId] = useState(users[0]?.id || '');
+  const [modalHouseholdId, setModalHouseholdId] = useState('');
+  const [modalBoothId, setModalBoothId] = useState('');
+  const [modalAssigneeId, setModalAssigneeId] = useState('');
   const [modalSubmitting, setModalSubmitting] = useState(false);
   const [modalError, setModalError] = useState('');
 
@@ -612,7 +612,25 @@ export function IssueManagementClient({
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1 text-[10px]">
+                    Linked Booth
+                  </label>
+                  <select
+                    value={modalBoothId}
+                    onChange={(e) => setModalBoothId(e.target.value)}
+                    className="w-full p-2 border border-slate-200 rounded-lg bg-slate-50 text-slate-800"
+                  >
+                    <option value="">All / None</option>
+                    {booths.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        Booth {b.boothNumber} - {b.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
                 <div>
                   <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1 text-[10px]">
                     Linked Household

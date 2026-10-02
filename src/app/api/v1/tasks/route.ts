@@ -68,17 +68,14 @@ export async function POST(req: NextRequest) {
       return apiError('VALIDATION_ERROR', 'User, scope type, and task type are required', 400);
     }
 
-    // Verify or resolve campaign
-    let campaign = campaignId ? await prisma.campaign.findUnique({ where: { id: campaignId } }) : null;
-    if (!campaign) {
-      campaign = await prisma.campaign.findFirst({ where: { status: 'ACTIVE' }, orderBy: { createdAt: 'desc' } });
-      if (!campaign) {
-        campaign = await prisma.campaign.findFirst({ orderBy: { createdAt: 'desc' } });
-      }
+    // Strictly require that the campaignId is provided
+    if (!campaignId) {
+      return apiError('VALIDATION_ERROR', 'Campaign ID is required for task assignment', 400);
     }
 
+    const campaign = await prisma.campaign.findUnique({ where: { id: campaignId } });
     if (!campaign) {
-      return apiError('NOT_FOUND', 'No valid campaign found for assignment', 404);
+      return apiError('NOT_FOUND', 'Campaign not found', 404);
     }
 
     // Check campaign access for creator
@@ -89,29 +86,31 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Verify target user exists and is a political agent or field worker
-    const user = await prisma.user.findUnique({ where: { id: userId } });
-    if (!user) {
-      return apiError('NOT_FOUND', 'Assignee user not found', 404);
-    }
-
-    // Ensure user has CampaignMembership in this campaign
-    let membership = await prisma.campaignMembership.findFirst({
-      where: { campaignId: campaign.id, userId: user.id },
+    // Verify target user has an active CampaignMembership in THIS campaign
+    const membership = await prisma.campaignMembership.findFirst({
+      where: { campaignId: campaign.id, userId, active: true },
+      include: { user: true },
     });
 
     if (!membership) {
-      membership = await prisma.campaignMembership.create({
-        data: {
-          campaignId: campaign.id,
-          userId: user.id,
-          role: user.role === 'CAMPAIGN_ADMIN' ? 'CAMPAIGN_ADMIN' : 'POLITICAL_AGENT',
-          scopeType: scopeType === 'BOOTH' ? 'BOOTH' : (scopeType === 'WARD' ? 'WARD' : 'ALL'),
-          scopeIds: boothId ? JSON.stringify([boothId]) : (wardId ? JSON.stringify([wardId]) : '[]'),
-          active: true,
-        },
+      return apiError(
+        'FORBIDDEN',
+        'Cross-campaign assignment rejected: Assignee is not an active member of this campaign',
+        403
+      );
+    }
+
+    const user = membership.user;
+
+    // Validate location parameters strictly belong to this campaign
+    if (boothId) {
+      const booth = await prisma.booth.findFirst({
+        where: { id: boothId, campaignId: campaign.id },
       });
-    } else if (boothId) {
+      if (!booth) {
+        return apiError('FORBIDDEN', 'Cross-campaign assignment rejected: Booth does not belong to this campaign', 403);
+      }
+
       // Sync boothId to agent's scopeIds if it's a booth assignment
       let currentScopes: string[] = [];
       try {
@@ -128,6 +127,15 @@ export async function POST(req: NextRequest) {
             scopeIds: JSON.stringify(currentScopes),
           },
         });
+      }
+    }
+
+    if (wardId) {
+      const ward = await prisma.ward.findFirst({
+        where: { id: wardId, campaignId: campaign.id },
+      });
+      if (!ward) {
+        return apiError('FORBIDDEN', 'Cross-campaign assignment rejected: Ward does not belong to this campaign', 403);
       }
     }
 

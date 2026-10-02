@@ -9,7 +9,7 @@ import { IssueManagementClient } from '@/components/campaign/IssueManagementClie
 export const revalidate = 0;
 
 export default async function IssueManagementPage({ params }: { params: { id: string } }) {
-  const [issues, users, booths, households] = await Promise.all([
+  const [issues, memberships, booths, households] = await Promise.all([
     prisma.issue.findMany({
       where: { campaignId: params.id },
       include: {
@@ -20,10 +20,12 @@ export default async function IssueManagementPage({ params }: { params: { id: st
       },
       orderBy: { createdAt: 'desc' },
     }),
-    prisma.user.findMany({
-      where: { status: 'ACTIVE' },
-      select: { id: true, displayName: true, role: true },
-      orderBy: { displayName: 'asc' },
+    prisma.campaignMembership.findMany({
+      where: { campaignId: params.id, active: true },
+      include: {
+        user: { select: { id: true, displayName: true, role: true } },
+      },
+      orderBy: { createdAt: 'desc' },
     }),
     prisma.booth.findMany({
       where: { campaignId: params.id },
@@ -37,6 +39,12 @@ export default async function IssueManagementPage({ params }: { params: { id: st
       orderBy: { code: 'asc' },
     }),
   ]);
+
+  const users = memberships.map((m) => ({
+    id: m.user.id,
+    displayName: m.user.displayName,
+    role: m.role || m.user.role,
+  }));
 
   const totalIssues = issues.length;
   const openIssues = issues.filter((i) => i.status === 'OPEN' || i.status === 'IN_PROGRESS').length;

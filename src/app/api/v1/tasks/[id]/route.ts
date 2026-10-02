@@ -81,7 +81,19 @@ export async function PATCH(
     if (status !== undefined) updateData.status = status;
     if (notes !== undefined) updateData.notes = notes;
     if (dueAt !== undefined) updateData.dueAt = dueAt ? new Date(dueAt) : null;
-    if (userId !== undefined && principal.platformRole !== 'POLITICAL_AGENT') updateData.userId = userId;
+    if (userId !== undefined && principal.platformRole !== 'POLITICAL_AGENT') {
+      const membership = await prisma.campaignMembership.findFirst({
+        where: { campaignId: assignment.campaignId, userId, active: true },
+      });
+      if (!membership) {
+        return apiError(
+          'FORBIDDEN',
+          'Cross-campaign assignment rejected: Assignee is not an active member of this campaign',
+          403
+        );
+      }
+      updateData.userId = userId;
+    }
     if (scopeTarget !== undefined && principal.platformRole !== 'POLITICAL_AGENT') updateData.scopeTarget = scopeTarget;
 
     const updated = await prisma.assignment.update({

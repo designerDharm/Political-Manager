@@ -95,11 +95,39 @@ export async function POST(req: NextRequest) {
     // Authoritative reporter is the authenticated session principal
     const reporterId = principal.userId;
 
-    // Resolve assignee if passed
+    // Validate location / household scope strictly belong to this campaign
+    if (boothId) {
+      const booth = await prisma.booth.findFirst({
+        where: { id: boothId, campaignId: campaign.id },
+      });
+      if (!booth) {
+        return apiError('FORBIDDEN', 'Cross-campaign location rejected: Booth does not belong to this campaign', 403);
+      }
+    }
+
+    if (householdId) {
+      const household = await prisma.household.findFirst({
+        where: { id: householdId, campaignId: campaign.id },
+      });
+      if (!household) {
+        return apiError('FORBIDDEN', 'Cross-campaign location rejected: Household does not belong to this campaign', 403);
+      }
+    }
+
+    // Resolve assignee if passed, enforcing campaign membership
     let effectiveAssigneeId = null;
     if (assigneeId) {
-      const assigneeExists = await prisma.user.findUnique({ where: { id: assigneeId } });
-      if (assigneeExists) effectiveAssigneeId = assigneeExists.id;
+      const membership = await prisma.campaignMembership.findFirst({
+        where: { campaignId: campaign.id, userId: assigneeId, active: true },
+      });
+      if (!membership) {
+        return apiError(
+          'FORBIDDEN',
+          'Cross-campaign assignment rejected: Assignee is not an active member of this campaign',
+          403
+        );
+      }
+      effectiveAssigneeId = assigneeId;
     }
 
     const count = await prisma.issue.count();
