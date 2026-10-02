@@ -272,8 +272,13 @@ export default function AgentElectionDayPage() {
             {/* Quick Metrics */}
             <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-slate-800 text-center">
               <div>
-                <span className="text-[10px] text-slate-400 block">Electors</span>
-                <span className="text-xs font-black text-white">{booth ? booth.totalElectors : 0}</span>
+                <span className="text-[10px] text-slate-400 block">Registered Electors</span>
+                <span className="text-xs font-black text-white">{booth ? (booth.registeredVoters ?? booth.totalElectors) : 0}</span>
+                {booth?.estimatedElectorate && booth.estimatedElectorate !== (booth.registeredVoters ?? booth.totalElectors) && (
+                  <span className="text-[9px] text-slate-400 block whitespace-nowrap">
+                    Est: {booth.estimatedElectorate.toLocaleString()}
+                  </span>
+                )}
               </div>
               <div>
                 <span className="text-[10px] text-slate-400 block">VIS Slips</span>
@@ -523,7 +528,14 @@ export default function AgentElectionDayPage() {
               <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                 <div>
                   <h3 className="font-bold text-sm text-slate-900">Record Booth Turnout</h3>
-                  <span className="text-[10px] text-slate-500">Booth #{booth.boothNumber} ({booth.totalElectors} electors)</span>
+                  <span className="text-[10px] text-slate-500">
+                    Booth #{booth.boothNumber} ({booth.registeredVoters ?? booth.totalElectors} registered electors)
+                    {booth.estimatedElectorate && booth.estimatedElectorate !== (booth.registeredVoters ?? booth.totalElectors) && (
+                      <span className="block text-[9px] text-slate-400">
+                        Est. Electorate: {booth.estimatedElectorate.toLocaleString()}
+                      </span>
+                    )}
+                  </span>
                 </div>
                 <button onClick={() => setShowTurnoutModal(false)} className="text-slate-400 hover:text-slate-600">
                   <X className="w-4 h-4" />

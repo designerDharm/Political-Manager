@@ -38,6 +38,8 @@ interface ElectionDayData {
   };
   metrics: {
     totalElectors: number;
+    totalRegisteredElectors?: number;
+    estimatedElectorate?: number | null;
     totalBooths: number;
     totalVisIssued: number;
     openIssuesCount: number;
@@ -53,6 +55,7 @@ interface ElectionDayData {
     pollingStation: string | null;
     totalElectors: number;
     registeredVoters: number;
+    estimatedElectorate?: number | null;
     visIssuedCount: number;
     openIssuesCount: number;
     assignedAgents: Array<{ id: string; name: string; email: string }>;
@@ -288,8 +291,12 @@ export function ElectionDayClient({ campaignId }: { campaignId: string }) {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         <StatCard
           title="Total Registered Electors"
-          value={data ? data.metrics.totalElectors.toLocaleString() : '...'}
-          subtitle="Imported voter roll registry"
+          value={data ? (data.metrics.totalRegisteredElectors ?? data.metrics.totalElectors).toLocaleString() : '...'}
+          subtitle={
+            data?.metrics.estimatedElectorate
+              ? `Planning Target: ${data.metrics.estimatedElectorate.toLocaleString()} Estimated Electorate`
+              : 'Imported voter roll registry'
+          }
           icon={Users}
           iconColor="text-blue-600"
           iconBgColor="bg-blue-50"
@@ -339,7 +346,7 @@ export function ElectionDayClient({ campaignId }: { campaignId: string }) {
               <tr>
                 <th className="py-3 px-4">Booth</th>
                 <th className="py-3 px-4">Polling Station</th>
-                <th className="py-3 px-4">Electors</th>
+                <th className="py-3 px-4">Registered Electors</th>
                 <th className="py-3 px-4">Assigned Agents</th>
                 <th className="py-3 px-4">VIS Issued</th>
                 <th className="py-3 px-4">Reported Turnout</th>
@@ -359,7 +366,12 @@ export function ElectionDayClient({ campaignId }: { campaignId: string }) {
                     <span className="block text-[10px] text-slate-400 truncate">{b.pollingStation || 'Location standard'}</span>
                   </td>
                   <td className="py-3 px-4 font-mono font-bold text-slate-800">
-                    {b.totalElectors}
+                    <div>{b.registeredVoters ?? b.totalElectors}</div>
+                    {b.estimatedElectorate && b.estimatedElectorate !== (b.registeredVoters ?? b.totalElectors) && (
+                      <span className="text-[9px] font-normal text-slate-400 block whitespace-nowrap">
+                        Est. Electorate: {b.estimatedElectorate.toLocaleString()}
+                      </span>
+                    )}
                   </td>
                   <td className="py-3 px-4">
                     {b.assignedAgents.length === 0 ? (
@@ -431,7 +443,12 @@ export function ElectionDayClient({ campaignId }: { campaignId: string }) {
                   Record Aggregate Turnout
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Booth {turnoutModalBooth.boothNumber}: {turnoutModalBooth.name} ({turnoutModalBooth.totalElectors} electors)
+                  Booth {turnoutModalBooth.boothNumber}: {turnoutModalBooth.name} ({turnoutModalBooth.registeredVoters ?? turnoutModalBooth.totalElectors} registered electors)
+                  {turnoutModalBooth.estimatedElectorate && turnoutModalBooth.estimatedElectorate !== (turnoutModalBooth.registeredVoters ?? turnoutModalBooth.totalElectors) && (
+                    <span className="block text-[10px] text-slate-400 mt-0.5">
+                      Estimated Electorate: {turnoutModalBooth.estimatedElectorate.toLocaleString()}
+                    </span>
+                  )}
                 </p>
               </div>
               <button

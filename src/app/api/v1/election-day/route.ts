@@ -42,6 +42,8 @@ export async function GET(req: NextRequest) {
         status: true,
         description: true,
         organizationId: true,
+        targetVoters: true,
+        estimatedVoters: true,
       },
     });
 
@@ -153,8 +155,9 @@ export async function GET(req: NextRequest) {
         wardNumber: b.ward.wardNumber,
         wardName: b.ward.name,
         pollingStation: b.pollingStation,
-        totalElectors: b.totalElectors || b._count.voters,
+        totalElectors: b._count.voters,
         registeredVoters: b._count.voters,
+        estimatedElectorate: b.totalElectors && b.totalElectors > 0 ? b.totalElectors : null,
         visIssuedCount: b._count.visEvents,
         openIssuesCount: b._count.issues,
         assignedAgents,
@@ -172,6 +175,7 @@ export async function GET(req: NextRequest) {
 
     const totalVisCount = booths.reduce((acc, b) => acc + b._count.visEvents, 0);
     const totalIssuesCount = booths.reduce((acc, b) => acc + b._count.issues, 0);
+    const campaignEstimatedElectorate = campaign.estimatedVoters || campaign.targetVoters || null;
 
     return apiSuccess({
       campaign: {
@@ -184,7 +188,9 @@ export async function GET(req: NextRequest) {
         closedAt: electionDayConfig.closedAt,
       },
       metrics: {
-        totalElectors,
+        totalElectors, // Registered voters from Voter table
+        totalRegisteredElectors: totalElectors,
+        estimatedElectorate: campaignEstimatedElectorate,
         totalBooths: booths.length,
         totalVisIssued: totalVisCount,
         openIssuesCount: totalIssuesCount,
@@ -473,12 +479,11 @@ export async function POST(req: NextRequest) {
         return apiError('VALIDATION_ERROR', 'Total reported turnout count cannot be negative', 400);
       }
 
-      // Authoritative electors from Booth record, or fallback to real voter count in booth
-      const electors = (booth.totalElectors && booth.totalElectors > 0)
-        ? booth.totalElectors
-        : await prisma.voter.count({ where: { boothId: booth.id, campaignId } });
+      // Authoritative electors from published Voter table, falling back to booth.totalElectors if no registered voters yet
+      const registeredCount = await prisma.voter.count({ where: { boothId: booth.id, campaignId } });
+      const electors = registeredCount > 0 ? registeredCount : (booth.totalElectors && booth.totalElectors > 0 ? booth.totalElectors : 0);
 
-      if (reported > electors) {
+      if (electors > 0 && reported > electors) {
         return apiError(
           'VALIDATION_ERROR',
           `Reported turnout (${reported}) exceeds booth total registered electors (${electors})`,
