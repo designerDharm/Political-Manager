@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { apiSuccess, apiError } from '@/lib/api/response';
 import { requireAuth, requireCampaignAccess, getAgentBoothScope } from '@/lib/auth';
+import { logAuditEvent } from '@/lib/api/audit';
 
 // GET /api/v1/election-day?campaignId=...
 export async function GET(req: NextRequest) {
@@ -260,20 +261,19 @@ export async function POST(req: NextRequest) {
             electionDate: campaign.electionDate || new Date(),
           },
         }),
-        prisma.auditEvent.create({
-          data: {
-            organizationId: campaign.organizationId,
-            campaignId,
-            actorId: principal.userId,
-            action: 'ELECTION_DAY_ACTIVATED',
-            resource: `campaign:${campaignId}`,
-            details: JSON.stringify({
-              configuredBy: principal.userId,
-              openedAt,
-            }),
-          },
-        }),
       ]);
+
+      await logAuditEvent({
+        organizationId: campaign.organizationId,
+        campaignId,
+        actorId: principal.userId,
+        action: 'ELECTION_DAY_ACTIVATED',
+        resource: `campaign:${campaignId}`,
+        details: JSON.stringify({
+          configuredBy: principal.userId,
+          openedAt,
+        }),
+      });
 
       return apiSuccess({ status: 'ACTIVE', openedAt }, { message: 'Election Day operations activated' });
     }
@@ -304,20 +304,19 @@ export async function POST(req: NextRequest) {
           where: { id: campaignId },
           data: { description: newDesc },
         }),
-        prisma.auditEvent.create({
-          data: {
-            organizationId: campaign.organizationId,
-            campaignId,
-            actorId: principal.userId,
-            action: 'ELECTION_DAY_CLOSED',
-            resource: `campaign:${campaignId}`,
-            details: JSON.stringify({
-              closedBy: principal.userId,
-              closedAt,
-            }),
-          },
-        }),
       ]);
+
+      await logAuditEvent({
+        organizationId: campaign.organizationId,
+        campaignId,
+        actorId: principal.userId,
+        action: 'ELECTION_DAY_CLOSED',
+        resource: `campaign:${campaignId}`,
+        details: JSON.stringify({
+          closedBy: principal.userId,
+          closedAt,
+        }),
+      });
 
       return apiSuccess({ status: 'CLOSED', closedAt }, { message: 'Election Day operations closed' });
     }
@@ -411,6 +410,7 @@ export async function POST(req: NextRequest) {
           },
         });
 
+        // TODO(QA-021): tx-scoped audit — migrate to logAuditEvent when transaction boundary is refactored
         await tx.auditEvent.create({
           data: {
             organizationId: campaign.organizationId,
@@ -509,6 +509,7 @@ export async function POST(req: NextRequest) {
           },
         });
 
+        // TODO(QA-021): tx-scoped audit — migrate to logAuditEvent when transaction boundary is refactored
         await tx.auditEvent.create({
           data: {
             organizationId: campaign.organizationId,

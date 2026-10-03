@@ -19,23 +19,35 @@ export default async function SuperAdminSystemLogsPage() {
   let invalidEventCount = 0;
   let duplicateHashCount = 0;
 
+  type EventCategory = 'VALID' | 'UNVERIFIED' | 'LEGACY' | 'DUPLICATE' | 'INVALID';
+
   const verifiedEvents = auditEvents.map((evt, idx) => {
-    let isCurrentValid = true;
+    let category: EventCategory = 'VALID';
     let failureReason = '';
 
     if (!evt.hash || evt.hash.trim().length === 0) {
-      isCurrentValid = false;
-      failureReason = 'Missing or empty hash';
+      // Recorded before any hashing was implemented — do NOT count as INVALID
+      category = 'UNVERIFIED';
+      failureReason = 'No hash recorded (pre-hashing era)';
+    } else if (evt.hash.length !== 64) {
+      // Old ad-hoc short hash (e.g. 16-char) — legacy record, not a tamper signal
+      category = 'LEGACY';
+      failureReason = 'Legacy record (pre-SHA-256 migration)';
     } else if (seenHashes.has(evt.hash)) {
-      isCurrentValid = false;
+      category = 'DUPLICATE';
       duplicateHashCount++;
       failureReason = 'Duplicate hash detected in audit log';
+      chainValid = false;
+      invalidEventCount++;
     } else {
       seenHashes.add(evt.hash);
-      const expectedPrevHash = idx === 0 ? (evt.prevHash || GENESIS_AUDIT_HASH) : auditEvents[idx - 1].hash;
+      const expectedPrevHash =
+        idx === 0 ? (evt.prevHash || GENESIS_AUDIT_HASH) : auditEvents[idx - 1].hash;
       if (evt.prevHash !== expectedPrevHash) {
-        isCurrentValid = false;
-        failureReason = `Broken prevHash link: expected ${expectedPrevHash?.slice(0, 8)}... but got ${evt.prevHash?.slice(0, 8)}...`;
+        category = 'INVALID';
+        failureReason = `Broken prevHash link: expected ${expectedPrevHash?.slice(0, 8)}… got ${evt.prevHash?.slice(0, 8)}…`;
+        chainValid = false;
+        invalidEventCount++;
       } else {
         const computed = computeAuditEventHash(evt.prevHash || GENESIS_AUDIT_HASH, {
           organizationId: evt.organizationId,
@@ -45,23 +57,19 @@ export default async function SuperAdminSystemLogsPage() {
           resource: evt.resource,
           details: evt.details,
         });
-
-        // If legacy event was recorded before SHA-256 migration, mark as legacy if hash doesn't match 64 hex chars
-        if (evt.hash.length === 64 && evt.hash !== computed) {
-          isCurrentValid = false;
-          failureReason = 'Hash mismatch against canonical payload';
+        if (evt.hash !== computed) {
+          category = 'INVALID';
+          failureReason = 'Hash mismatch against canonical payload (tamper detected)';
+          chainValid = false;
+          invalidEventCount++;
         }
       }
     }
 
-    if (!isCurrentValid) {
-      chainValid = false;
-      invalidEventCount++;
-    }
-
     return {
       ...evt,
-      isCurrentValid,
+      category,
+      isCurrentValid: category === 'VALID',
       failureReason,
     };
   });
@@ -113,38 +121,67 @@ export default async function SuperAdminSystemLogsPage() {
               )}
             </h3>
             <div className="divide-y divide-slate-100 font-mono text-[11px]">
-              {displayEvents.map((evt) => (
-                <div
-                  key={evt.id}
-                  className={`py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2 rounded transition ${
-                    evt.isCurrentValid ? 'hover:bg-slate-50/50' : 'bg-rose-50/70 border border-rose-200'
-                  }`}
-                >
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-slate-800 text-xs">{evt.action}</span>
-                      <span className="text-slate-400">[{evt.resource}]</span>
-                      {!evt.isCurrentValid && (
-                        <span className="px-1.5 py-0.5 text-[9px] font-bold rounded bg-rose-200 text-rose-800">
-                          INVALID ({evt.failureReason})
-                        </span>
-                      )}
+              {displayEvents.map((evt) => {
+                const rowBg =
+                  evt.category === 'INVALID' || evt.category === 'DUPLICATE'
+                    ? 'bg-rose-50/70 border border-rose-200'
+                    : evt.category === 'LEGACY'
+                    ? 'bg-amber-50/70 border border-amber-200'
+                    : evt.category === 'UNVERIFIED'
+                    ? 'bg-slate-100/70 border border-slate-200'
+                    : 'hover:bg-slate-50/50';
+
+                const badgeEl =
+                  evt.category === 'INVALID' || evt.category === 'DUPLICATE' ? (
+                    <span className="px-1.5 py-0.5 text-[9px] font-bold rounded bg-rose-200 text-rose-800">
+                      {evt.category} — {evt.failureReason}
+                    </span>
+                  ) : evt.category === 'LEGACY' ? (
+                    <span className="px-1.5 py-0.5 text-[9px] font-bold rounded bg-amber-200 text-amber-800">
+                      LEGACY (pre-SHA-256)
+                    </span>
+                  ) : evt.category === 'UNVERIFIED' ? (
+                    <span className="px-1.5 py-0.5 text-[9px] font-bold rounded bg-slate-200 text-slate-600">
+                      UNVERIFIED (no hash)
+                    </span>
+                  ) : null;
+
+                const hashColor =
+                  evt.category === 'INVALID' || evt.category === 'DUPLICATE'
+                    ? 'text-rose-600 font-bold'
+                    : evt.category === 'LEGACY'
+                    ? 'text-amber-600'
+                    : evt.category === 'UNVERIFIED'
+                    ? 'text-slate-400 italic'
+                    : 'text-blue-600';
+
+                return (
+                  <div
+                    key={evt.id}
+                    className={`py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2 rounded transition ${rowBg}`}
+                  >
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-slate-800 text-xs">{evt.action}</span>
+                        <span className="text-slate-400">[{evt.resource}]</span>
+                        {badgeEl}
+                      </div>
+                      <div className="text-[10px] text-slate-500 font-mono mt-0.5 space-y-0.5">
+                        <div>
+                          Hash: <span className={hashColor}>{evt.hash || 'NO_HASH'}</span>
+                        </div>
+                        <div className="text-slate-400">
+                          Prev: <span>{evt.prevHash || GENESIS_AUDIT_HASH}</span>
+                        </div>
+                      </div>
                     </div>
-                    <div className="text-[10px] text-slate-500 font-mono mt-0.5 space-y-0.5">
-                      <div>
-                        Hash: <span className={evt.isCurrentValid ? 'text-blue-600' : 'text-rose-600 font-bold'}>{evt.hash || 'NO_HASH'}</span>
-                      </div>
-                      <div className="text-slate-400">
-                        Prev: <span>{evt.prevHash || GENESIS_AUDIT_HASH}</span>
-                      </div>
+                    <div className="text-slate-400 text-right text-[10px]">
+                      <div>{new Date(evt.createdAt).toLocaleString()}</div>
+                      <div className="text-slate-500">Actor: {evt.actorId || 'SYSTEM'}</div>
                     </div>
                   </div>
-                  <div className="text-slate-400 text-right text-[10px]">
-                    <div>{new Date(evt.createdAt).toLocaleString()}</div>
-                    <div className="text-slate-500">Actor: {evt.actorId || 'SYSTEM'}</div>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </main>

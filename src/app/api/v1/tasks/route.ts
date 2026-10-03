@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { apiSuccess, apiError } from '@/lib/api/response';
 import { requireAuth } from '@/lib/auth';
+import { logAuditEvent } from '@/lib/api/audit';
 
 export async function GET(req: NextRequest) {
   try {
@@ -179,22 +180,20 @@ export async function POST(req: NextRequest) {
     });
 
     // Write audit event
-    await prisma.auditEvent.create({
-      data: {
-        organizationId: campaign.organizationId,
-        campaignId: campaign.id,
-        actorId: creatorId,
-        action: 'ASSIGNMENT_CREATED',
-        resource: `Assignment:${assignment.id}`,
-        details: JSON.stringify({
-          assigneeId: user.id,
-          assigneeName: user.displayName,
-          scopeType,
-          scopeTarget: effectiveScopeTarget,
-          taskType,
-          boothId: boothId || null,
-        }),
-      },
+    await logAuditEvent({
+      organizationId: campaign.organizationId,
+      campaignId: campaign.id,
+      actorId: creatorId,
+      action: 'ASSIGNMENT_CREATED',
+      resource: `Assignment:${assignment.id}`,
+      details: JSON.stringify({
+        assigneeId: user.id,
+        assigneeName: user.displayName,
+        scopeType,
+        scopeTarget: effectiveScopeTarget,
+        taskType,
+        boothId: boothId || null,
+      }),
     });
 
 

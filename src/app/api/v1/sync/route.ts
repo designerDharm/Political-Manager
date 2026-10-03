@@ -154,6 +154,7 @@ export async function POST(req: NextRequest) {
             }
 
             // Emit AuditEvent for Step 7 Realtime SSE Propagation
+            // TODO(QA-021): tx-scoped audit — migrate to logAuditEvent when transaction boundary is refactored
             await tx.auditEvent.create({
               data: {
                 actorId: validUserId,
@@ -216,6 +217,7 @@ export async function POST(req: NextRequest) {
               },
             });
 
+            // TODO(QA-021): tx-scoped audit — migrate to logAuditEvent when transaction boundary is refactored
             await tx.auditEvent.create({
               data: {
                 actorId: validUserId,
@@ -316,6 +318,7 @@ export async function POST(req: NextRequest) {
               },
             });
 
+            // TODO(QA-021): tx-scoped audit — migrate to logAuditEvent when transaction boundary is refactored
             await tx.auditEvent.create({
               data: {
                 actorId: validUserId,

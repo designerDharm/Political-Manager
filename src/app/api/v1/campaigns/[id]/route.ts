@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { apiSuccess, apiError } from '@/lib/api/response';
 import { requireAuth, requireCampaignAccess } from '@/lib/auth';
+import { logAuditEvent } from '@/lib/api/audit';
 
 // GET /api/v1/campaigns/[id] - Fetch full campaign setup & geography details
 export async function GET(req: NextRequest, { params }: { params: { id: string } }): Promise<Response> {
@@ -189,17 +190,15 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     });
 
     // Record audit event for campaign update
-    await prisma.auditEvent.create({
-      data: {
-        organizationId: updated.organizationId,
-        action: 'UPDATE_CAMPAIGN_SETUP',
-        resource: `campaign:${campaignId}`,
-        details: JSON.stringify({
-          updatedBy: authResult.principal.userId,
-          fields: Object.keys(updateData),
-          status: updated.status,
-        }),
-      },
+    await logAuditEvent({
+      organizationId: updated.organizationId,
+      action: 'UPDATE_CAMPAIGN_SETUP',
+      resource: `campaign:${campaignId}`,
+      details: JSON.stringify({
+        updatedBy: authResult.principal.userId,
+        fields: Object.keys(updateData),
+        status: updated.status,
+      }),
     });
 
     return apiSuccess(updated, { message: 'Campaign setup updated successfully' });

@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { apiSuccess, apiError } from '@/lib/api/response';
 import { requireAuth, requireCampaignAccess } from '@/lib/auth';
 import { runCampaignHouseholdGrouping } from '@/lib/households/groupingEngine';
+import { logAuditEvent } from '@/lib/api/audit';
 
 // POST /api/v1/households/grouping/run - Run grouping engine on campaign voters
 export async function POST(req: NextRequest) {
@@ -35,15 +36,13 @@ export async function POST(req: NextRequest) {
     const result = await runCampaignHouseholdGrouping(campaignId, boothId);
 
     // Audit Event
-    await prisma.auditEvent.create({
-      data: {
-        organizationId: campaign.organizationId,
-        campaignId: campaign.id,
-        actorId: authResult.principal.userId,
-        action: 'HOUSEHOLD_SUGGESTED',
-        resource: `Campaign:${campaign.id}`,
-        details: JSON.stringify(result),
-      },
+    await logAuditEvent({
+      organizationId: campaign.organizationId,
+      campaignId: campaign.id,
+      actorId: authResult.principal.userId,
+      action: 'HOUSEHOLD_SUGGESTED',
+      resource: `Campaign:${campaign.id}`,
+      details: JSON.stringify(result),
     });
 
     return apiSuccess(result, { message: 'Household grouping executed successfully' });

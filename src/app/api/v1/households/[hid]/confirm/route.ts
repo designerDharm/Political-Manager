@@ -56,6 +56,7 @@ export async function POST(
       });
 
       if (campaign) {
+        // TODO(QA-021): tx-scoped audit — migrate to logAuditEvent when transaction boundary is refactored
         await tx.auditEvent.create({
           data: {
             organizationId: campaign.organizationId,

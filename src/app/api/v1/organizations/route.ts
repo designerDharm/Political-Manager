@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { apiSuccess, apiError } from '@/lib/api/response';
+import { logAuditEvent } from '@/lib/api/audit';
 
 export async function GET(req: NextRequest) {
   try {
@@ -53,13 +54,11 @@ export async function POST(req: NextRequest) {
     });
 
     // Record audit event
-    await prisma.auditEvent.create({
-      data: {
-        organizationId: org.id,
-        action: 'CREATE_ORGANIZATION',
-        resource: `organization:${org.id}`,
-        details: JSON.stringify({ name: org.name, slug: org.slug }),
-      },
+    await logAuditEvent({
+      organizationId: org.id,
+      action: 'CREATE_ORGANIZATION',
+      resource: `organization:${org.id}`,
+      details: JSON.stringify({ name: org.name, slug: org.slug }),
     });
 
     return apiSuccess(org, { message: 'Organization created successfully' }, 201);

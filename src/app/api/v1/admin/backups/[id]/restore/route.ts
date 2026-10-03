@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { apiSuccess, apiError } from '@/lib/api/response';
 import { requirePlatformRole } from '@/lib/auth';
 import { restorePostgresBackup, getBackupBuffer } from '@/lib/backup/postgresBackup';
+import { logAuditEvent } from '@/lib/api/audit';
 
 // POST /api/v1/admin/backups/[id]/restore - Restore a verified PostgreSQL backup to an isolated target
 export async function POST(
@@ -63,18 +64,16 @@ export async function POST(
 
     const meta = JSON.parse(auditRecord.details || '{}');
     if (meta.sha256 && computedSha256 !== meta.sha256) {
-      await prisma.auditEvent.create({
-        data: {
-          organizationId: auditRecord.organizationId,
-          actorId: principal.userId,
-          action: 'RESTORE_REJECTED',
-          resource: `backup:${backupId}`,
-          details: JSON.stringify({
-            reason: 'CHECKSUM_MISMATCH',
-            expected: meta.sha256,
-            actual: computedSha256,
-          }),
-        },
+      await logAuditEvent({
+        organizationId: auditRecord.organizationId,
+        actorId: principal.userId,
+        action: 'RESTORE_REJECTED',
+        resource: `backup:${backupId}`,
+        details: JSON.stringify({
+          reason: 'CHECKSUM_MISMATCH',
+          expected: meta.sha256,
+          actual: computedSha256,
+        }),
       });
 
       return apiError(
@@ -88,37 +87,33 @@ export async function POST(
     const isolatedTarget = targetDatabase || `isolated_drill_target_${backupId.slice(0, 8)}`;
 
     // Log RESTORE_STARTED
-    await prisma.auditEvent.create({
-      data: {
-        organizationId: auditRecord.organizationId,
-        actorId: principal.userId,
-        action: 'RESTORE_STARTED',
-        resource: `backup:${backupId}`,
-        details: JSON.stringify({
-          filename,
-          targetDatabase: isolatedTarget,
-          sha256: computedSha256,
-        }),
-      },
+    await logAuditEvent({
+      organizationId: auditRecord.organizationId,
+      actorId: principal.userId,
+      action: 'RESTORE_STARTED',
+      resource: `backup:${backupId}`,
+      details: JSON.stringify({
+        filename,
+        targetDatabase: isolatedTarget,
+        sha256: computedSha256,
+      }),
     });
 
     // Execute restore validation into isolated target
     const restoreResult = await restorePostgresBackup(backupId, isolatedTarget);
 
     // Log RESTORE_COMPLETED
-    await prisma.auditEvent.create({
-      data: {
-        organizationId: auditRecord.organizationId,
-        actorId: principal.userId,
-        action: 'RESTORE_COMPLETED',
-        resource: `backup:${backupId}`,
-        details: JSON.stringify({
-          filename,
-          targetDatabase: isolatedTarget,
-          details: restoreResult.details,
-          rowsRestored: restoreResult.rowsRestored,
-        }),
-      },
+    await logAuditEvent({
+      organizationId: auditRecord.organizationId,
+      actorId: principal.userId,
+      action: 'RESTORE_COMPLETED',
+      resource: `backup:${backupId}`,
+      details: JSON.stringify({
+        filename,
+        targetDatabase: isolatedTarget,
+        details: restoreResult.details,
+        rowsRestored: restoreResult.rowsRestored,
+      }),
     });
 
     return apiSuccess(

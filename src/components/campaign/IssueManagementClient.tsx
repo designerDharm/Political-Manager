@@ -19,6 +19,7 @@ import {
   FileText
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { formatBoothLabel } from '@/lib/formatting';
 
 export interface IssueItem {
   id: string;
@@ -625,7 +626,7 @@ export function IssueManagementClient({
                     <option value="">All / None</option>
                     {booths.map((b) => (
                       <option key={b.id} value={b.id}>
-                        Booth {b.boothNumber} - {b.name}
+                        {formatBoothLabel(b.boothNumber, b.name)}
                       </option>
                     ))}
                   </select>

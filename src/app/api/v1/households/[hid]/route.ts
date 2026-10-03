@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { apiSuccess, apiError } from '@/lib/api/response';
 import { requireAuth, getAgentBoothScope } from '@/lib/auth';
+import { logAuditEvent } from '@/lib/api/audit';
 
 export async function GET(
   req: NextRequest,
@@ -159,21 +160,19 @@ export async function POST(
     });
 
     if (campaign) {
-      await prisma.auditEvent.create({
-        data: {
-          organizationId: campaign.organizationId,
-          campaignId: household.campaignId,
-          actorId: principal.userId,
-          action: 'FIELD_VISIT_RECORDED',
-          resource: `Household:${household.id}`,
-          details: JSON.stringify({
-            householdCode: household.code,
-            interactionId: interaction.id,
-            status: interaction.status,
-            agentName: interaction.agent?.displayName,
-            boothId: household.boothId,
-          }),
-        },
+      await logAuditEvent({
+        organizationId: campaign.organizationId,
+        campaignId: household.campaignId,
+        actorId: principal.userId,
+        action: 'FIELD_VISIT_RECORDED',
+        resource: `Household:${household.id}`,
+        details: JSON.stringify({
+          householdCode: household.code,
+          interactionId: interaction.id,
+          status: interaction.status,
+          agentName: interaction.agent?.displayName,
+          boothId: household.boothId,
+        }),
       });
     }
 
@@ -244,19 +243,17 @@ export async function PATCH(
     });
 
     if (campaign) {
-      await prisma.auditEvent.create({
-        data: {
-          organizationId: campaign.organizationId,
-          campaignId: household.campaignId,
-          actorId: principal.userId,
-          action: 'HOUSEHOLD_ADDRESS_CORRECTED',
-          resource: `Household:${household.id}`,
-          details: JSON.stringify({
-            householdCode: household.code,
-            address: updated.address,
-            primaryContact: updated.primaryContactName,
-          }),
-        },
+      await logAuditEvent({
+        organizationId: campaign.organizationId,
+        campaignId: household.campaignId,
+        actorId: principal.userId,
+        action: 'HOUSEHOLD_ADDRESS_CORRECTED',
+        resource: `Household:${household.id}`,
+        details: JSON.stringify({
+          householdCode: household.code,
+          address: updated.address,
+          primaryContact: updated.primaryContactName,
+        }),
       });
     }
 

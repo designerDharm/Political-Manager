@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { apiSuccess, apiError } from '@/lib/api/response';
+import { logAuditEvent } from '@/lib/api/audit';
 
 // GET: Retrieve all political parties (Single Source of Truth)
 export async function GET(req: NextRequest) {
@@ -59,19 +60,17 @@ export async function POST(req: NextRequest) {
     });
 
     // Audit event for party creation
-    await prisma.auditEvent.create({
-      data: {
-        organizationId: org.id,
-        action: 'CREATE_POLITICAL_PARTY',
-        resource: `party:${party.id}`,
-        details: JSON.stringify({
-          name: party.name,
-          abbreviation: party.abbreviation,
-          symbolUrl: party.symbolUrl,
-          brandColor,
-          isIndependent: !!isIndependent,
-        }),
-      },
+    await logAuditEvent({
+      organizationId: org.id,
+      action: 'CREATE_POLITICAL_PARTY',
+      resource: `party:${party.id}`,
+      details: JSON.stringify({
+        name: party.name,
+        abbreviation: party.abbreviation,
+        symbolUrl: party.symbolUrl,
+        brandColor,
+        isIndependent: !!isIndependent,
+      }),
     });
 
     return apiSuccess(party, { message: 'Political party created successfully' }, 201);

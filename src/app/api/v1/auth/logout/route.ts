@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { apiSuccess, apiError } from '@/lib/api/response';
 import { revokeSession, SESSION_COOKIE_NAME, authenticateRequest } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { logAuditEvent } from '@/lib/api/audit';
 
 export async function POST(req: NextRequest) {
   try {
@@ -13,13 +14,11 @@ export async function POST(req: NextRequest) {
     }
 
     if (principal) {
-      await prisma.auditEvent.create({
-        data: {
-          organizationId: principal.organizationId,
-          action: 'LOGOUT',
-          resource: `user:${principal.userId}`,
-          details: JSON.stringify({ email: principal.email }),
-        },
+      await logAuditEvent({
+        organizationId: principal.organizationId,
+        action: 'LOGOUT',
+        resource: `user:${principal.userId}`,
+        details: JSON.stringify({ email: principal.email }),
       });
     }
 

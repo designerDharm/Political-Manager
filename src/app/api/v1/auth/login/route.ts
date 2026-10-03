@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { apiSuccess, apiError } from '@/lib/api/response';
 import { verifyPassword, createSession, SESSION_COOKIE_NAME, SESSION_TTL_HOURS } from '@/lib/auth';
+import { logAuditEvent } from '@/lib/api/audit';
 
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCKOUT_MINUTES = 15;
@@ -74,13 +75,11 @@ export async function POST(req: NextRequest) {
         },
       });
 
-      await prisma.auditEvent.create({
-        data: {
-          organizationId: user.organizationId,
-          action: 'LOGIN_FAILURE',
-          resource: `user:${user.id}`,
-          details: JSON.stringify({ email: normalizedEmail, reason: 'INVALID_PASSWORD', attempt: newFailedCount }),
-        },
+      await logAuditEvent({
+        organizationId: user.organizationId,
+        action: 'LOGIN_FAILURE',
+        resource: `user:${user.id}`,
+        details: JSON.stringify({ email: normalizedEmail, reason: 'INVALID_PASSWORD', attempt: newFailedCount }),
       });
 
       if (willLock) {
@@ -108,13 +107,11 @@ export async function POST(req: NextRequest) {
     const { token, expiresAt } = await createSession(user.id, req);
 
     // Write audit event
-    await prisma.auditEvent.create({
-      data: {
-        organizationId: user.organizationId,
-        action: 'LOGIN_SUCCESS',
-        resource: `user:${user.id}`,
-        details: JSON.stringify({ email: user.email, role: user.role }),
-      },
+    await logAuditEvent({
+      organizationId: user.organizationId,
+      action: 'LOGIN_SUCCESS',
+      resource: `user:${user.id}`,
+      details: JSON.stringify({ email: user.email, role: user.role }),
     });
 
     // Prepare response with HTTP-only cookie

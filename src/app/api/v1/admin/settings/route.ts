@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { apiSuccess, apiError } from '@/lib/api/response';
 import { requirePlatformRole } from '@/lib/auth';
+import { logAuditEvent } from '@/lib/api/audit';
 
 export async function GET(req: NextRequest) {
   try {
@@ -56,13 +57,11 @@ export async function POST(req: NextRequest) {
     const org = await prisma.organization.findFirst();
     const orgId = org?.id || 'default-org';
 
-    await prisma.auditEvent.create({
-      data: {
-        organizationId: orgId,
-        action: 'UPDATE_GLOBAL_SETTINGS',
-        resource: 'system:settings',
-        details: JSON.stringify(payload),
-      },
+    await logAuditEvent({
+      organizationId: orgId,
+      action: 'UPDATE_GLOBAL_SETTINGS',
+      resource: 'system:settings',
+      details: JSON.stringify(payload),
     });
 
     return apiSuccess(payload, { message: 'Platform settings saved successfully' }, 200);

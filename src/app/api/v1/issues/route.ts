@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { apiSuccess, apiError } from '@/lib/api/response';
 import { requireAuth, getAgentBoothScope } from '@/lib/auth';
+import { logAuditEvent } from '@/lib/api/audit';
 
 export async function GET(req: NextRequest) {
   try {
@@ -156,21 +157,19 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    await prisma.auditEvent.create({
-      data: {
-        organizationId: campaign.organizationId,
-        campaignId: campaign.id,
-        actorId: reporterId,
-        action: 'ISSUE_CREATED',
-        resource: `Issue:${issue.id}`,
-        details: JSON.stringify({
-          code: issue.code,
-          title: issue.title,
-          category: issue.category,
-          priority: issue.priority,
-          householdId: issue.householdId,
-        }),
-      },
+    await logAuditEvent({
+      organizationId: campaign.organizationId,
+      campaignId: campaign.id,
+      actorId: reporterId,
+      action: 'ISSUE_CREATED',
+      resource: `Issue:${issue.id}`,
+      details: JSON.stringify({
+        code: issue.code,
+        title: issue.title,
+        category: issue.category,
+        priority: issue.priority,
+        householdId: issue.householdId,
+      }),
     });
 
     return apiSuccess(issue, { created: true }, 201);

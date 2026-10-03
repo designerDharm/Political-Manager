@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { apiSuccess, apiError } from '@/lib/api/response';
 import { requireAuth, requireCampaignAccess } from '@/lib/auth';
+import { logAuditEvent } from '@/lib/api/audit';
 
 // PATCH /api/v1/campaigns/[id]/booths/[boothId] - Update booth details
 export async function PATCH(
@@ -100,19 +101,17 @@ export async function PATCH(
         select: { organizationId: true },
       });
       if (campaignRecord) {
-        await prisma.auditEvent.create({
-          data: {
-            organizationId: campaignRecord.organizationId,
-            campaignId,
-            actorId: authResult.principal.userId,
-            action: 'BOOTH_LOCATION_UPDATED',
-            resource: `booth:${boothId}`,
-            details: JSON.stringify({
-              boothNumber: updated.boothNumber,
-              latitude: updated.latitude,
-              longitude: updated.longitude,
-            }),
-          },
+        await logAuditEvent({
+          organizationId: campaignRecord.organizationId,
+          campaignId,
+          actorId: authResult.principal.userId,
+          action: 'BOOTH_LOCATION_UPDATED',
+          resource: `booth:${boothId}`,
+          details: JSON.stringify({
+            boothNumber: updated.boothNumber,
+            latitude: updated.latitude,
+            longitude: updated.longitude,
+          }),
         }).catch(() => null);
       }
     }

@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { apiSuccess, apiError } from '@/lib/api/response';
 import { requireAuth, requireCampaignAccess, getAgentBoothScope } from '@/lib/auth';
 import { generateCsv } from '@/lib/analytics/csv';
+import { logAuditEvent } from '@/lib/api/audit';
 
 // GET /api/v1/campaigns/[id]/reports?type=...&format=...&wardId=...&boothId=...
 export async function GET(
@@ -103,15 +104,13 @@ export async function GET(
       const csvData = generateCsv(headers, rows);
 
       // Audit export event
-      await prisma.auditEvent.create({
-        data: {
-          organizationId: campaign.organizationId,
-          campaignId,
-          actorId: principal.userId,
-          action: 'REPORT_EXPORTED',
-          resource: 'report:OPERATIONAL_SUMMARY',
-          details: JSON.stringify({ format, rowsCount: rows.length, wardId, boothId }),
-        },
+      await logAuditEvent({
+        organizationId: campaign.organizationId,
+        campaignId,
+        actorId: principal.userId,
+        action: 'REPORT_EXPORTED',
+        resource: 'report:OPERATIONAL_SUMMARY',
+        details: JSON.stringify({ format, rowsCount: rows.length, wardId, boothId }),
       });
 
       return new Response(csvData, {
@@ -184,15 +183,13 @@ export async function GET(
 
       const csvData = generateCsv(headers, rows);
 
-      await prisma.auditEvent.create({
-        data: {
-          organizationId: campaign.organizationId,
-          campaignId,
-          actorId: principal.userId,
-          action: 'REPORT_EXPORTED',
-          resource: 'report:FIELD_OPERATIONS',
-          details: JSON.stringify({ format, rowsCount: rows.length, wardId, boothId }),
-        },
+      await logAuditEvent({
+        organizationId: campaign.organizationId,
+        campaignId,
+        actorId: principal.userId,
+        action: 'REPORT_EXPORTED',
+        resource: 'report:FIELD_OPERATIONS',
+        details: JSON.stringify({ format, rowsCount: rows.length, wardId, boothId }),
       });
 
       return new Response(csvData, {
@@ -259,15 +256,13 @@ export async function GET(
 
       const csvData = generateCsv(headers, rows);
 
-      await prisma.auditEvent.create({
-        data: {
-          organizationId: campaign.organizationId,
-          campaignId,
-          actorId: principal.userId,
-          action: 'REPORT_EXPORTED',
-          resource: 'report:VIS_DELIVERY_LOG',
-          details: JSON.stringify({ format, rowsCount: rows.length, boothId }),
-        },
+      await logAuditEvent({
+        organizationId: campaign.organizationId,
+        campaignId,
+        actorId: principal.userId,
+        action: 'REPORT_EXPORTED',
+        resource: 'report:VIS_DELIVERY_LOG',
+        details: JSON.stringify({ format, rowsCount: rows.length, boothId }),
       });
 
       return new Response(csvData, {
@@ -333,15 +328,13 @@ export async function GET(
 
       const csvData = generateCsv(headers, rows);
 
-      await prisma.auditEvent.create({
-        data: {
-          organizationId: campaign.organizationId,
-          campaignId,
-          actorId: principal.userId,
-          action: 'REPORT_EXPORTED',
-          resource: 'report:ISSUES_REGISTER',
-          details: JSON.stringify({ format, rowsCount: rows.length }),
-        },
+      await logAuditEvent({
+        organizationId: campaign.organizationId,
+        campaignId,
+        actorId: principal.userId,
+        action: 'REPORT_EXPORTED',
+        resource: 'report:ISSUES_REGISTER',
+        details: JSON.stringify({ format, rowsCount: rows.length }),
       });
 
       return new Response(csvData, {
@@ -401,15 +394,13 @@ export async function GET(
 
       const csvData = generateCsv(headers, rows);
 
-      await prisma.auditEvent.create({
-        data: {
-          organizationId: campaign.organizationId,
-          campaignId,
-          actorId: principal.userId,
-          action: 'REPORT_EXPORTED',
-          resource: 'report:TURNOUT_PROGRESSION',
-          details: JSON.stringify({ format, rowsCount: rows.length }),
-        },
+      await logAuditEvent({
+        organizationId: campaign.organizationId,
+        campaignId,
+        actorId: principal.userId,
+        action: 'REPORT_EXPORTED',
+        resource: 'report:TURNOUT_PROGRESSION',
+        details: JSON.stringify({ format, rowsCount: rows.length }),
       });
 
       return new Response(csvData, {

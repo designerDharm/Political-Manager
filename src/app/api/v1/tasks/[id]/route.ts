@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { apiSuccess, apiError } from '@/lib/api/response';
 import { requireAuth, requireCampaignAccess } from '@/lib/auth';
+import { logAuditEvent } from '@/lib/api/audit';
 
 // GET /api/v1/tasks/[id] - Get task details
 export async function GET(
@@ -105,18 +106,16 @@ export async function PATCH(
       },
     });
 
-    await prisma.auditEvent.create({
-      data: {
-        organizationId: assignment.campaign.organizationId,
-        campaignId: assignment.campaignId,
-        actorId: principal.userId,
-        action: status === 'Cancelled' ? 'ASSIGNMENT_CANCELLED' : 'ASSIGNMENT_UPDATED',
-        resource: `Assignment:${assignment.id}`,
-        details: JSON.stringify({
-          updatedFields: Object.keys(updateData),
-          newStatus: updated.status,
-        }),
-      },
+    await logAuditEvent({
+      organizationId: assignment.campaign.organizationId,
+      campaignId: assignment.campaignId,
+      actorId: principal.userId,
+      action: status === 'Cancelled' ? 'ASSIGNMENT_CANCELLED' : 'ASSIGNMENT_UPDATED',
+      resource: `Assignment:${assignment.id}`,
+      details: JSON.stringify({
+        updatedFields: Object.keys(updateData),
+        newStatus: updated.status,
+      }),
     });
 
     return apiSuccess(updated, { message: 'Assignment updated successfully' });
