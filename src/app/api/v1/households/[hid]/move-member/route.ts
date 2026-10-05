@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { apiSuccess, apiError } from '@/lib/api/response';
 import { requireAuth, requireCampaignAccess, getAgentBoothScope } from '@/lib/auth';
+import { logAuditEvent } from '@/lib/api/audit';
 
 // POST /api/v1/households/[hid]/move-member - Move a voter to another household or new household
 export async function POST(
@@ -133,21 +134,18 @@ export async function POST(
         select: { organizationId: true },
       });
       if (campaign) {
-        // TODO(QA-021): tx-scoped audit — migrate to logAuditEvent when transaction boundary is refactored
-        await tx.auditEvent.create({
-          data: {
-            organizationId: campaign.organizationId,
-            campaignId: sourceHousehold.campaignId,
-            actorId: authResult.principal.userId,
-            action: 'HOUSEHOLD_MEMBER_MOVED',
-            resource: `Voter:${voter.id}`,
-            details: JSON.stringify({
-              voterName: voter.name,
-              fromHouseholdId: sourceHousehold.id,
-              toHouseholdId: destinationHouseholdId,
-            }),
-          },
-        });
+        await logAuditEvent({
+          organizationId: campaign.organizationId,
+          campaignId: sourceHousehold.campaignId,
+          actorId: authResult.principal.userId,
+          action: 'HOUSEHOLD_MEMBER_MOVED',
+          resource: `Voter:${voter.id}`,
+          details: JSON.stringify({
+            voterName: voter.name,
+            fromHouseholdId: sourceHousehold.id,
+            toHouseholdId: destinationHouseholdId,
+          }),
+        }, tx);
       }
 
       return {

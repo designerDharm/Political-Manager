@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { apiSuccess, apiError } from '@/lib/api/response';
 import { requireAuth } from '@/lib/auth';
+import { logAuditEvent } from '@/lib/api/audit';
 
 export async function GET(req: NextRequest) {
   try {
@@ -174,21 +175,18 @@ export async function POST(req: NextRequest) {
         });
       }
 
-      // Record audit event
-      // TODO(QA-021): tx-scoped audit — migrate to logAuditEvent when transaction boundary is refactored
-      await tx.auditEvent.create({
-        data: {
-          organizationId: org.id,
-          action: 'CREATE_CAMPAIGN',
-          resource: `campaign:${campaign.id}`,
-          details: JSON.stringify({
-            createdBy: principal.userId,
-            name: campaign.name,
-            electionLevel: campaign.electionLevel,
-            status: campaign.status,
-          }),
-        },
-      });
+      // Record audit event — shares campaign-creation transaction
+      await logAuditEvent({
+        organizationId: org.id,
+        action: 'CREATE_CAMPAIGN',
+        resource: `campaign:${campaign.id}`,
+        details: JSON.stringify({
+          createdBy: principal.userId,
+          name: campaign.name,
+          electionLevel: campaign.electionLevel,
+          status: campaign.status,
+        }),
+      }, tx);
 
       return campaign;
     });

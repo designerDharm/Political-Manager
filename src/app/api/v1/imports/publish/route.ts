@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { apiSuccess, apiError } from '@/lib/api/response';
 import { requireAuth, requireCampaignAccess } from '@/lib/auth';
+import { logAuditEvent } from '@/lib/api/audit';
 
 // POST /api/v1/imports/publish - Transactional idempotent publishing of staged records to Voter registry
 export async function POST(req: NextRequest) {
@@ -221,23 +222,20 @@ export async function POST(req: NextRequest) {
         data: { totalElectors: totalElectorsInBooth },
       });
 
-      // Audit Log
-      // TODO(QA-021): tx-scoped audit — migrate to logAuditEvent when transaction boundary is refactored
-      await tx.auditEvent.create({
-        data: {
-          organizationId: campaign.organizationId,
+      // Audit Log — shares the business transaction
+      await logAuditEvent({
+        organizationId: campaign.organizationId,
+        campaignId: campaign.id,
+        actorId: authResult.principal.userId,
+        action: 'IMPORT_PUBLISHED',
+        resource: `ElectoralRollImport:${importId}`,
+        details: JSON.stringify({
           campaignId: campaign.id,
-          actorId: authResult.principal.userId,
-          action: 'IMPORT_PUBLISHED',
-          resource: `ElectoralRollImport:${importId}`,
-          details: JSON.stringify({
-            campaignId: campaign.id,
-            publishedCount,
-            targetWardId,
-            targetBoothId,
-          }),
-        },
-      });
+          publishedCount,
+          targetWardId,
+          targetBoothId,
+        }),
+      }, tx);
 
       return {
         publishedCount,

@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { apiSuccess, apiError } from '@/lib/api/response';
 import { requireAuth, requireCampaignAccess, getAgentBoothScope } from '@/lib/auth';
+import { logAuditEvent } from '@/lib/api/audit';
 
 // POST /api/v1/households/[hid]/merge - Merge another household into this household
 export async function POST(
@@ -115,21 +116,18 @@ export async function POST(
         select: { organizationId: true },
       });
       if (campaign) {
-        // TODO(QA-021): tx-scoped audit — migrate to logAuditEvent when transaction boundary is refactored
-        await tx.auditEvent.create({
-          data: {
-            organizationId: campaign.organizationId,
-            campaignId: primaryHousehold.campaignId,
-            actorId: authResult.principal.userId,
-            action: 'HOUSEHOLD_MERGED',
-            resource: `Household:${primaryHousehold.id}`,
-            details: JSON.stringify({
-              keptHouseholdCode: primaryHousehold.code,
-              mergedHouseholdCode: mergingHousehold.code,
-              totalMembersAfterMerge: updatedPrimary.members.length,
-            }),
-          },
-        });
+        await logAuditEvent({
+          organizationId: campaign.organizationId,
+          campaignId: primaryHousehold.campaignId,
+          actorId: authResult.principal.userId,
+          action: 'HOUSEHOLD_MERGED',
+          resource: `Household:${primaryHousehold.id}`,
+          details: JSON.stringify({
+            keptHouseholdCode: primaryHousehold.code,
+            mergedHouseholdCode: mergingHousehold.code,
+            totalMembersAfterMerge: updatedPrimary.members.length,
+          }),
+        }, tx);
       }
 
       return updatedPrimary;

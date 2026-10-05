@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { apiSuccess, apiError } from '@/lib/api/response';
 import { requireAuth, getAgentBoothScope } from '@/lib/auth';
+import { logAuditEvent } from '@/lib/api/audit';
 
 interface MutationEnvelope {
   mutationId: string;
@@ -153,27 +154,24 @@ export async function POST(req: NextRequest) {
               });
             }
 
-            // Emit AuditEvent for Step 7 Realtime SSE Propagation
-            // TODO(QA-021): tx-scoped audit — migrate to logAuditEvent when transaction boundary is refactored
-            await tx.auditEvent.create({
-              data: {
-                actorId: validUserId,
-                organizationId: principal.organizationId,
-                campaignId: current.campaignId,
-                action: 'FIELD_VISIT_RECORDED',
-                resource: `household:${current.id}`,
-                details: JSON.stringify({
-                  mutationId,
-                  deviceId,
-                  householdId: current.id,
-                  code: current.code,
-                  boothId: current.boothId,
-                  agentId: validUserId,
-                  visitStatus: payload.visitStatus || 'VISITED',
-                  clientOccurredAt,
-                }),
-              },
-            });
+            // Emit AuditEvent — shares field-visit transaction
+            await logAuditEvent({
+              actorId: validUserId,
+              organizationId: principal.organizationId,
+              campaignId: current.campaignId,
+              action: 'FIELD_VISIT_RECORDED',
+              resource: `household:${current.id}`,
+              details: JSON.stringify({
+                mutationId,
+                deviceId,
+                householdId: current.id,
+                code: current.code,
+                boothId: current.boothId,
+                agentId: validUserId,
+                visitStatus: payload.visitStatus || 'VISITED',
+                clientOccurredAt,
+              }),
+            }, tx);
 
             return up;
           });
@@ -217,24 +215,22 @@ export async function POST(req: NextRequest) {
               },
             });
 
-            // TODO(QA-021): tx-scoped audit — migrate to logAuditEvent when transaction boundary is refactored
-            await tx.auditEvent.create({
-              data: {
-                actorId: validUserId,
-                organizationId: principal.organizationId,
-                campaignId,
-                action: 'ISSUE_CREATED',
-                resource: `issue:${createdIssue.id}`,
-                details: JSON.stringify({
-                  mutationId,
-                  deviceId,
-                  issueId: createdIssue.id,
-                  boothId: payload.boothId || null,
-                  priority: createdIssue.priority,
-                  clientOccurredAt,
-                }),
-              },
-            });
+            // Audit — shares issue-creation transaction
+            await logAuditEvent({
+              actorId: validUserId,
+              organizationId: principal.organizationId,
+              campaignId,
+              action: 'ISSUE_CREATED',
+              resource: `issue:${createdIssue.id}`,
+              details: JSON.stringify({
+                mutationId,
+                deviceId,
+                issueId: createdIssue.id,
+                boothId: payload.boothId || null,
+                priority: createdIssue.priority,
+                clientOccurredAt,
+              }),
+            }, tx);
 
             return createdIssue;
           });
@@ -318,23 +314,21 @@ export async function POST(req: NextRequest) {
               },
             });
 
-            // TODO(QA-021): tx-scoped audit — migrate to logAuditEvent when transaction boundary is refactored
-            await tx.auditEvent.create({
-              data: {
-                actorId: validUserId,
-                organizationId: principal.organizationId,
-                campaignId,
-                action: finalEventType === 'REISSUED' ? 'VIS_REISSUED' : 'VIS_ISSUED',
-                resource: `vis:${vis.id}`,
-                details: JSON.stringify({
-                  mutationId,
-                  deviceId,
-                  voterId,
-                  boothId,
-                  clientOccurredAt,
-                }),
-              },
-            });
+            // Audit — shares offline VIS transaction
+            await logAuditEvent({
+              actorId: validUserId,
+              organizationId: principal.organizationId,
+              campaignId,
+              action: finalEventType === 'REISSUED' ? 'VIS_REISSUED' : 'VIS_ISSUED',
+              resource: `vis:${vis.id}`,
+              details: JSON.stringify({
+                mutationId,
+                deviceId,
+                voterId,
+                boothId,
+                clientOccurredAt,
+              }),
+            }, tx);
 
             return vis;
           });

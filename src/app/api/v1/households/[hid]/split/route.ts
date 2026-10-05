@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { apiSuccess, apiError } from '@/lib/api/response';
 import { requireAuth, requireCampaignAccess, getAgentBoothScope } from '@/lib/auth';
+import { logAuditEvent } from '@/lib/api/audit';
 
 // POST /api/v1/households/[hid]/split - Split selected members into a new household
 export async function POST(
@@ -105,21 +106,18 @@ export async function POST(
         select: { organizationId: true },
       });
       if (campaign) {
-          // TODO(QA-021): tx-scoped audit — migrate to logAuditEvent when transaction boundary is refactored
-          await tx.auditEvent.create({
-          data: {
-            organizationId: campaign.organizationId,
-            campaignId: sourceHousehold.campaignId,
-            actorId: authResult.principal.userId,
-            action: 'HOUSEHOLD_SPLIT',
-            resource: `Household:${sourceHousehold.id}`,
-            details: JSON.stringify({
-              fromHouseholdCode: sourceHousehold.code,
-              newHouseholdCode: newHousehold.code,
-              movedMembersCount: votersToMove.length,
-            }),
-          },
-        });
+          await logAuditEvent({
+          organizationId: campaign.organizationId,
+          campaignId: sourceHousehold.campaignId,
+          actorId: authResult.principal.userId,
+          action: 'HOUSEHOLD_SPLIT',
+          resource: `Household:${sourceHousehold.id}`,
+          details: JSON.stringify({
+            fromHouseholdCode: sourceHousehold.code,
+            newHouseholdCode: newHousehold.code,
+            movedMembersCount: votersToMove.length,
+          }),
+        }, tx);
       }
 
       return newHousehold;

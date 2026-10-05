@@ -4,6 +4,7 @@ import { apiSuccess, apiError } from '@/lib/api/response';
 import { requireAuth, requireCampaignAccess } from '@/lib/auth';
 import { extractTextFromPdf } from '@/lib/ocr/provider';
 import { parseElectoralRollPages, ParseRollResult } from '@/lib/ocr/electoralRollParser';
+import { logAuditEvent } from '@/lib/api/audit';
 import { parseCsvRows, parseXlsxRows, parseTabularVoterRows } from '@/lib/ocr/tabularParser';
 import fs from 'fs';
 import path from 'path';
@@ -289,26 +290,23 @@ export async function POST(req: NextRequest) {
         });
       }
 
-      // Record audit event
-      // TODO(QA-021): tx-scoped audit — migrate to logAuditEvent when transaction boundary is refactored
-      await tx.auditEvent.create({
-        data: {
-          organizationId: campaign.organizationId,
+      // Record audit event — shares the business transaction (commits or rolls back together)
+      await logAuditEvent({
+        organizationId: campaign.organizationId,
+        campaignId: campaign.id,
+        actorId: authResult.principal.userId,
+        action: 'ELECTORAL_ROLL_UPLOADED',
+        resource: `ElectoralRollImport:${job.id}`,
+        details: JSON.stringify({
           campaignId: campaign.id,
-          actorId: authResult.principal.userId,
-          action: 'ELECTORAL_ROLL_UPLOADED',
-          resource: `ElectoralRollImport:${job.id}`,
-          details: JSON.stringify({
-            campaignId: campaign.id,
-            originalFilename: filename,
-            format: isCsv ? 'CSV' : isXlsx ? 'XLSX' : 'PDF',
-            totalExtracted: parseResult.totalExtracted,
-            confidenceAvg: parseResult.confidenceAvg,
-            lowConfidenceCount: parseResult.lowConfidenceCount,
-            duplicateCount: parseResult.duplicateCount,
-          }),
-        },
-      });
+          originalFilename: filename,
+          format: isCsv ? 'CSV' : isXlsx ? 'XLSX' : 'PDF',
+          totalExtracted: parseResult.totalExtracted,
+          confidenceAvg: parseResult.confidenceAvg,
+          lowConfidenceCount: parseResult.lowConfidenceCount,
+          duplicateCount: parseResult.duplicateCount,
+        }),
+      }, tx);
 
       return job;
     });

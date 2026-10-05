@@ -611,6 +611,7 @@ model AuditEvent {
   resource       String
   details        String
   ipAddress      String?
+  hashVersion    Int?         // NULL = legacy/pre-versioning; 1 = SHA-256 chained (CURRENT_HASH_VERSION)
   hash           String?      // Tamper-evident hash chaining
   prevHash       String?
   createdAt      DateTime     @default(now())

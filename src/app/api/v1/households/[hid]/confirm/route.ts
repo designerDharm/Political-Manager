@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { apiSuccess, apiError } from '@/lib/api/response';
 import { requireAuth, requireCampaignAccess, getAgentBoothScope } from '@/lib/auth';
+import { logAuditEvent } from '@/lib/api/audit';
 
 // POST /api/v1/households/[hid]/confirm - Confirm suggested household
 export async function POST(
@@ -56,17 +57,14 @@ export async function POST(
       });
 
       if (campaign) {
-        // TODO(QA-021): tx-scoped audit — migrate to logAuditEvent when transaction boundary is refactored
-        await tx.auditEvent.create({
-          data: {
-            organizationId: campaign.organizationId,
-            campaignId: household.campaignId,
-            actorId: authResult.principal.userId,
-            action: 'HOUSEHOLD_CONFIRMED',
-            resource: `Household:${household.id}`,
-            details: JSON.stringify({ householdCode: household.code }),
-          },
-        });
+        await logAuditEvent({
+          organizationId: campaign.organizationId,
+          campaignId: household.campaignId,
+          actorId: authResult.principal.userId,
+          action: 'HOUSEHOLD_CONFIRMED',
+          resource: `Household:${household.id}`,
+          details: JSON.stringify({ householdCode: household.code }),
+        }, tx);
       }
 
       return h;

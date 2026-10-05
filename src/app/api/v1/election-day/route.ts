@@ -410,24 +410,22 @@ export async function POST(req: NextRequest) {
           },
         });
 
-        // TODO(QA-021): tx-scoped audit — migrate to logAuditEvent when transaction boundary is refactored
-        await tx.auditEvent.create({
-          data: {
-            organizationId: campaign.organizationId,
-            campaignId,
-            actorId: principal.userId,
-            action: wantsReissue ? 'VIS_REISSUED' : 'VIS_ISSUED',
-            resource: `vis:${record.id}`,
-            details: JSON.stringify({
-              voterId,
-              boothId,
-              epicNumber: voter.epicNumber,
-              referenceCode,
-              eventType,
-              agentId: principal.userId,
-            }),
-          },
-        });
+        // Audit — shares VIS issuance transaction
+        await logAuditEvent({
+          organizationId: campaign.organizationId,
+          campaignId,
+          actorId: principal.userId,
+          action: wantsReissue ? 'VIS_REISSUED' : 'VIS_ISSUED',
+          resource: `vis:${record.id}`,
+          details: JSON.stringify({
+            voterId,
+            boothId,
+            epicNumber: voter.epicNumber,
+            referenceCode,
+            eventType,
+            agentId: principal.userId,
+          }),
+        }, tx);
 
         return record;
       });
@@ -509,24 +507,22 @@ export async function POST(req: NextRequest) {
           },
         });
 
-        // TODO(QA-021): tx-scoped audit — migrate to logAuditEvent when transaction boundary is refactored
-        await tx.auditEvent.create({
-          data: {
-            organizationId: campaign.organizationId,
-            campaignId,
-            actorId: principal.userId,
-            action: 'TURNOUT_RECORDED',
-            resource: `turnout:${s.id}`,
-            details: JSON.stringify({
-              boothId,
-              boothNumber: booth.boothNumber,
-              turnoutHour: s.turnoutHour,
-              totalReported: s.totalReported,
-              percentage: s.percentage,
-              source: s.source,
-            }),
-          },
-        });
+        // Audit — shares turnout snapshot transaction
+        await logAuditEvent({
+          organizationId: campaign.organizationId,
+          campaignId,
+          actorId: principal.userId,
+          action: 'TURNOUT_RECORDED',
+          resource: `turnout:${s.id}`,
+          details: JSON.stringify({
+            boothId,
+            boothNumber: booth.boothNumber,
+            turnoutHour: s.turnoutHour,
+            totalReported: s.totalReported,
+            percentage: s.percentage,
+            source: s.source,
+          }),
+        }, tx);
 
         return s;
       });
