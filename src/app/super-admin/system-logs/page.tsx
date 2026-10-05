@@ -8,9 +8,9 @@ import {
   ShieldAlert,
   CheckCircle2,
   Clock,
-  Terminal,
   AlertTriangle,
   Shield,
+  ServerCrash,
 } from 'lucide-react';
 import { computeAuditEventHash, GENESIS_AUDIT_HASH, CURRENT_HASH_VERSION } from '@/lib/api/audit';
 
@@ -19,9 +19,88 @@ export const revalidate = 0;
 type EventCategory = 'VALID' | 'LEGACY' | 'DUPLICATE' | 'INVALID';
 
 export default async function SuperAdminSystemLogsPage() {
-  const auditEvents = await prisma.auditEvent.findMany({
-    orderBy: { createdAt: 'asc' },
-  });
+  let auditEvents: any[] = [];
+  let dbError: string | null = null;
+
+  try {
+    auditEvents = await prisma.auditEvent.findMany({
+      orderBy: { createdAt: 'asc' },
+    });
+  } catch (err: any) {
+    dbError = err?.message || 'Database query failed';
+  }
+
+  // ── Honest Error State ───────────────────────────────────────────────────
+  // If the database query or runtime throws, NEVER render "Healthy", "Valid",
+  // or fabricated 0 counts. Show an unambiguous, high-visibility error state.
+  if (dbError) {
+    return (
+      <div className="flex min-h-screen bg-slate-50">
+        <Sidebar role="SUPER_ADMIN" />
+        <div className="flex-1 flex flex-col min-w-0">
+          <TopHeader />
+          <main className="flex-1 p-8 overflow-y-auto">
+            <div className="mb-6">
+              <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+                System Logs &amp; Cryptographic Audit Trails
+              </h1>
+              <p className="text-xs text-rose-600 font-semibold mt-1 flex items-center gap-1.5">
+                <AlertTriangle className="w-4 h-4" /> System Verification Offline — Audit Query Failed
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+              <StatCard
+                title="Service Status"
+                value="UNAVAILABLE"
+                subtitle="Database query failed"
+                icon={ServerCrash}
+                iconColor="text-rose-600"
+                iconBgColor="bg-rose-50"
+                badge={{ text: 'QUERY FAILED', type: 'danger' }}
+              />
+              <StatCard
+                title="Audit Trail State"
+                value="UNVERIFIED"
+                subtitle="Verification cannot proceed"
+                icon={ShieldAlert}
+                iconColor="text-rose-600"
+                iconBgColor="bg-rose-50"
+                badge={{ text: 'OFFLINE', type: 'danger' }}
+              />
+              <StatCard
+                title="Integrity Guarantee"
+                value="NOT ASSURED"
+                subtitle="Records could not be read"
+                icon={ShieldAlert}
+                iconColor="text-rose-600"
+                iconBgColor="bg-rose-50"
+                badge={{ text: 'UNKNOWN', type: 'danger' }}
+              />
+            </div>
+
+            <div className="rounded-xl border border-rose-300 bg-rose-50/70 p-6 shadow-sm">
+              <div className="flex items-start gap-3">
+                <ShieldAlert className="w-6 h-6 text-rose-600 shrink-0 mt-0.5" />
+                <div className="space-y-2">
+                  <h3 className="text-sm font-bold text-rose-900">
+                    Failed to Load Cryptographic Audit Log
+                  </h3>
+                  <p className="text-xs text-rose-800 leading-relaxed">
+                    The audit event registry could not be read from the primary database. The system
+                    refuses to report healthy status or zero discrepancies when verification cannot run.
+                  </p>
+                  <div className="mt-3 p-3 bg-white/90 rounded border border-rose-200 font-mono text-xs text-rose-950 overflow-x-auto">
+                    {dbError}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+    );
+  }
 
   const total = auditEvents.length;
 
